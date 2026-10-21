@@ -1,0 +1,7 @@
+# PyInstaller
+build/
+dist/
+__pycache__/
+*.exe
+*.exe.new
+*.zip

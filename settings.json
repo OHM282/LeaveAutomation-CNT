@@ -1,0 +1,17 @@
+{
+  "main_file": "D:/WRT/Downloads/CHROME/1856 3-4-5 DD.111026-311026.xlsx",
+  "appr_file": "D:/WRT/Downloads/CHROME/อนุมัติ 21.10.26.xlsx",
+  "att_file": "D:/WRT/Downloads/CHROME/ใบแจ้งการมาทำงาน 21.10.26.xlsx",
+  "save_mode": "overwrite",
+  "github_repo": "OHM282/LeaveAutomation-CNT",
+  "col_config": {
+    "emp_id_col": "A",
+    "emp_name_col": "B",
+    "scan_col": "E",
+    "leave_type_col": "G",
+    "checkin_col": "L",
+    "checkout_col": "M",
+    "leave_code_col": "Q",
+    "start_row": "2"
+  }
+}

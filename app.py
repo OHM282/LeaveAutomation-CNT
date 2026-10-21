@@ -1,0 +1,4358 @@
+"""
+Leave & Attendance Automation Tool for Staff Time Report (CN.1856)
+===================================================================
+Theme: GOOGLE + PINEAPPLE (11856) + COCONUT (11867) 🍍🥥
+Senior-Friendly Modern CustomTkinter Edition (ตัวหนังสือใหญ่ อ่านสบายตา ไม่ตัวเล็ก รองรับการตั้งค่าช่องคอลัมน์เอง)
+
+Features:
+1. 🏖️ บันทึกการลาที่ได้รับการอนุมัติอัตโนมัติ (Leave Automation)
+2. ⏰ บันทึกใบแจ้งการมาทำงาน (Attendance Notification / ลืมสแกนนิ้ว) พร้อมกฎปัดเศษลงช่วงละ 30 นาที
+3. ⚙️ ระบบตั้งค่าคอลัมน์เป้าหมายในไฟล์ STAFF TIME แบบยืดหยุ่น (Custom Columns)
+4. 🛡️ ระบบกันพลาด 5 ชั้น (Safeguards: สแกนครบ, Double-Check ชื่อ-รหัส, ตรวจข้อมูลขัดแย้ง, สแกนเดี่ยวซ้ำซ้อน, Audit Report)
+5. 🔍 ตรวจสอบและแสดงรายการแก้ไขทั้งหมดก่อนบันทึกจริง (Pre-Check Preview All Changes)
+6. 👤 ระบบตรวจสอบรายคน (Employee Quick Inspector)
+7. 📈 สถิติภาพรวมโครงการ (STAFF TIME Project Analytics)
+8. 📖 คู่มือการใช้งานแบบละเอียดฝังในโปรแกรม (Interactive User Manual)
+9. 💾 บันทึกและจดจำการตั้งค่าและไฟล์ล่าสุดอัตโนมัติ (Auto-save Settings)
+10. 🕒 ไอคอนนาฬิกาประจำโปรแกรม ไร้ไอคอนขนนก
+11. 🔍 ฟอนต์ Tahoma ตัวใหญ่คมชัด อ่านสบายตาทั่วทั้งโปรแกรม
+"""
+
+import os
+import sys
+import io
+import re
+import json
+import math
+import zipfile
+import shutil
+import subprocess
+import threading
+import urllib.request
+import urllib.error
+from datetime import datetime, timedelta, time, date
+import tkinter as tk
+from tkinter import filedialog, messagebox
+
+# เปิด High-DPI ให้ตัวหนังสือคมชัด ไม่เบลอบนจอความละเอียดสูง
+try:
+    import ctypes
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+# ตั้งค่า AppUserModelID เพื่อให้ Windows Taskbar แสดงไอคอนนาฬิกา
+try:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("cnt.stafftime.automation.ohm282")
+except Exception:
+    pass
+
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+import pandas as pd
+from PIL import Image, ImageDraw, ImageTk
+import customtkinter as ctk
+
+# ตั้งค่าธีม CustomTkinter
+ctk.set_appearance_mode("light")
+ctk.set_default_color_theme("blue")
+
+# ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
+APP_VERSION = "1.0.0"
+DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
+
+
+# -------------------------------------------------------------
+# ตัวช่วยจัดการไอคอนนาฬิกา & พาธไฟล์ (Clock Icon & Path Helpers)
+# -------------------------------------------------------------
+
+def get_resource_path(relative_name):
+    """ดึง Path ของไฟล์ Resource รองรับทั้งขณะ Dev และใน PyInstaller .exe"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_name)
+    return os.path.join(os.path.abspath(os.path.dirname(__file__)), relative_name)
+
+
+def get_settings_file_path():
+    """ดึง Path ของไฟล์ settings.json วางข้าง .exe หรือสคริปต์หลัก"""
+    if hasattr(sys, '_MEIPASS'):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, "settings.json")
+
+
+def load_app_settings():
+    """โหลดการตั้งค่าที่บันทึกไว้ล่าสุด"""
+    try:
+        p = get_settings_file_path()
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def save_app_settings(data):
+    """บันทึกการตั้งค่าลง settings.json"""
+    try:
+        p = get_settings_file_path()
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def center_window(window, width, height, parent=None):
+    """จัดตำแหน่งหน้าต่างให้อยู่กึ่งกลางหน้าจอหรือกึ่งกลางหน้าต่างแม่"""
+    window.update_idletasks()
+    if parent:
+        parent.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() - width) // 2
+        y = parent.winfo_y() + (parent.winfo_height() - height) // 2
+    else:
+        sw = window.winfo_screenwidth()
+        sh = window.winfo_screenheight()
+        x = (sw - width) // 2
+        y = (sh - height) // 2
+    x = max(20, x)
+    y = max(20, y)
+    window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+def ensure_clock_icon():
+    """สร้างไฟล์ clock.ico หากยังไม่มี เพื่อใช้เป็นไอคอนประจำโปรแกรม"""
+    icon_path = get_resource_path("clock.ico")
+    if os.path.exists(icon_path):
+        return icon_path
+        
+    try:
+        target_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "clock.ico")
+        size = 512
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Outer slate ring & blue border
+        margin = 24
+        draw.ellipse([margin, margin, size - margin, size - margin], fill="#1e293b", outline="#2563eb", width=20)
+        
+        # Dial
+        inner_m = margin + 26
+        draw.ellipse([inner_m, inner_m, size - inner_m, size - inner_m], fill="#ffffff", outline="#e2e8f0", width=8)
+        
+        center = size // 2
+        radius = (size - 2 * inner_m) // 2
+        
+        # Ticks
+        for h in range(12):
+            ang = math.radians(h * 30 - 90)
+            is_maj = (h % 3 == 0)
+            t_len = 32 if is_maj else 18
+            t_w = 10 if is_maj else 5
+            col = "#1e293b" if is_maj else "#94a3b8"
+            x1 = center + int((radius - 16) * math.cos(ang))
+            y1 = center + int((radius - 16) * math.sin(ang))
+            x2 = center + int((radius - 16 - t_len) * math.cos(ang))
+            y2 = center + int((radius - 16 - t_len) * math.sin(ang))
+            draw.line([x1, y1, x2, y2], fill=col, width=t_w)
+            
+        # Hands (7:30)
+        h_ang = math.radians(225 - 90)
+        h_len = radius * 0.52
+        draw.line([center, center, center + int(h_len * math.cos(h_ang)), center + int(h_len * math.sin(h_ang))], fill="#1e293b", width=16)
+        
+        m_ang = math.radians(180 - 90)
+        m_len = radius * 0.72
+        draw.line([center, center, center + int(m_len * math.cos(m_ang)), center + int(m_len * math.sin(m_ang))], fill="#f59e0b", width=12)
+        
+        # Center gold pin
+        draw.ellipse([center - 18, center - 18, center + 18, center + 18], fill="#f59e0b", outline="#b45309", width=4)
+        draw.ellipse([center - 8, center - 8, center + 8, center + 8], fill="#ffffff")
+        
+        sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+        img.save(target_path, format="ICO", sizes=sizes)
+        return target_path
+    except Exception:
+        return None
+
+
+def get_default_column_config():
+    """คืนค่าคอนฟิกตำแหน่งคอลัมน์มาตรฐาน"""
+    return {
+        'emp_id_col': 'A',
+        'emp_name_col': 'B',
+        'scan_col': 'E',
+        'leave_type_col': 'G',
+        'checkin_col': 'L',
+        'checkout_col': 'M',
+        'leave_code_col': 'Q',
+        'start_row': 2
+    }
+
+
+# -------------------------------------------------------------
+# ฟังก์ชันคำนวณและประมวลผลพื้นฐาน (Backend Helpers)
+# -------------------------------------------------------------
+
+def extract_emp_id(emp_str):
+    """
+    ดึงเฉพาะรหัสพนักงานที่เป็นตัวเลข ตัด 0 นำหน้าออก เช่น 'A05114 : นายนพดล' -> '5114'
+    """
+    if not emp_str or str(emp_str) == 'nan':
+        return ""
+    match = re.search(r'\d+', str(emp_str))
+    if match:
+        digits = match.group(0)
+        return digits.lstrip('0')
+    return str(emp_str).strip()
+
+
+def to_decimal_hours(val):
+    """
+    แปลงค่าเวลาในเซลล์เป็นตัวเลขชั่วโมง เช่น 7:30 -> 7.5, 18:30 -> 18.5
+    """
+    if val is None or str(val) == 'nan':
+        return None
+    if isinstance(val, time):
+        return val.hour + val.minute / 60.0 + val.second / 3600.0
+    if isinstance(val, datetime):
+        return val.hour + val.minute / 60.0 + val.second / 3600.0
+    if isinstance(val, (int, float)):
+        if 0 <= val <= 1.0:
+            return val * 24.0
+        if 1.0 < val < 24.0:
+            return float(val)
+        return None
+    if isinstance(val, str):
+        val = val.strip()
+        m = re.search(r'(\d{1,2}):(\d{2})(?::(\d{2}))?', val)
+        if m:
+            h = int(m.group(1))
+            mi = int(m.group(2))
+            return h + mi / 60.0
+    return None
+
+
+def calculate_checkout_time(time_val):
+    """
+    คำนวณเวลาออก (Check-out) ตามระเบียบบริษัท:
+    - เริ่มต้นที่ 16:30 เป็นต้นไป
+    - ปัดเศษนาทีลงเป็นช่วงละ 30 นาที (:00 หรือ :30)
+      เช่น 16:55 -> 16:30
+          17:00 -> 17:00
+          17:10 -> 17:00 (ปัดเศษลงตามหลักเกณฑ์)
+          17:33 -> 17:30
+          18:01 -> 18:00
+          18:31 -> 18:30
+    """
+    h, m = None, None
+    if isinstance(time_val, (time, datetime)):
+        h = time_val.hour
+        m = time_val.minute
+    elif isinstance(time_val, (int, float)):
+        if 0 <= time_val <= 1.0:
+            tot_sec = int(round(time_val * 86400))
+            h = (tot_sec // 3600) % 24
+            m = (tot_sec % 3600) // 60
+        else:
+            h = int(time_val)
+            m = int(round((time_val - h) * 60))
+    elif isinstance(time_val, str):
+        match = re.search(r'(\d{1,2}):(\d{2})', time_val)
+        if match:
+            h = int(match.group(1))
+            m = int(match.group(2))
+            
+    if h is None or m is None:
+        return time(16, 30)
+        
+    # เริ่มต้นที่ 16:30 เป็นต้นไป
+    if h < 16 or (h == 16 and m < 30):
+        return time(16, 30)
+        
+    # ปัดเศษลงเป็นช่วงละ 30 นาที (:00 หรือ :30)
+    if m < 30:
+        return time(h, 0)
+    else:
+        return time(h, 30)
+
+
+def check_fingerprint_scans(val):
+    """
+    ตรวจสอบข้อมูลการสแกนนิ้วดิบ (ช่อง E / Time ของไฟล์ STAFF TIME)
+    ครอบคลุมช่วงเช้าตั้งแต่ 04:00 - 11:59 (เพื่อรองรับคนมาเช้าตรู่)
+    และออกช่วงบ่าย/เย็น >= 12:00
+    คืนค่าเป็น (has_in, has_out, scans_list, earliest_dec, latest_dec)
+    """
+    if val is None or str(val) == 'nan':
+        return False, False, [], None, None
+    
+    val_str = str(val).strip()
+    matches = re.findall(r'(\d{1,2}):(\d{2})', val_str)
+    scans_list = []
+    has_in = False
+    has_out = False
+    dec_times = []
+    
+    if matches:
+        for m in matches:
+            h = int(m[0])
+            mi = int(m[1])
+            time_str = f"{h:02d}:{mi:02d}"
+            if time_str not in scans_list:
+                scans_list.append(time_str)
+            t_dec = h + mi / 60.0
+            dec_times.append(t_dec)
+            if 4.0 <= t_dec < 12.0:  # ขยายช่วงเช้าเริ่มต้นที่ 04:00 น.
+                has_in = True
+            elif t_dec >= 12.0:
+                has_out = True
+    elif isinstance(val, (datetime, time)):
+        h = val.hour
+        mi = val.minute
+        time_str = f"{h:02d}:{mi:02d}"
+        scans_list.append(time_str)
+        t_dec = h + mi / 60.0
+        dec_times.append(t_dec)
+        if 4.0 <= t_dec < 12.0:
+            has_in = True
+        elif t_dec >= 12.0:
+            has_out = True
+            
+    earliest_dec = min(dec_times) if dec_times else None
+    latest_dec = max(dec_times) if dec_times else None
+    
+    return has_in, has_out, scans_list, earliest_dec, latest_dec
+
+
+def clean_thai_name(name):
+    """
+    ตัดคำนำหน้าชื่อภาษาไทยและภาษาอังกฤษ และตัดช่องว่างส่วนเกินออก
+    เพื่อใช้เปรียบเทียบชื่อพนักงานอย่างแม่นยำ (Double-check)
+    """
+    if not name or str(name) == 'nan':
+        return ""
+    s = str(name).strip()
+    s = re.sub(r'^[A-Za-z]?\d+\s*[:\-\.]\s*', '', s).strip()
+    prefixes = [
+        'นางสาว', 'น.ส.', 'น.ส', 'นาย', 'นาง', 
+        'MR.', 'MR ', 'MISS.', 'MISS ', 'MRS.', 'MRS '
+    ]
+    upper_s = s.upper()
+    for prefix in prefixes:
+        if upper_s.startswith(prefix.upper()):
+            s = s[len(prefix):].strip()
+            break
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def check_name_similarity(name1, name2):
+    """
+    ตรวจสอบความสอดคล้องกันของชื่อพนักงานเพื่อทำ Double-Check
+    ป้องกันการบันทึกผิดคนกรณีชีท STAFF TIME พิมพ์รหัสพนักงานผิด
+    """
+    c1 = clean_thai_name(name1)
+    c2 = clean_thai_name(name2)
+    if not c1 or not c2:
+        return True  # ถ้าไม่มีชื่อในชีท ให้ถือว่าผ่านการตรวจ
+        
+    parts1 = c1.split()
+    parts2 = c2.split()
+    
+    first1 = parts1[0] if parts1 else ""
+    first2 = parts2[0] if parts2 else ""
+    
+    if first1 and first2 and first1 == first2:
+        return True
+    if (len(first1) >= 3 and first1 in c2) or (len(first2) >= 3 and first2 in c1):
+        return True
+        
+    return False
+
+
+def set_cell_time(cell, target_time):
+    """
+    เขียนค่าเวลาลงเซลล์ให้เป็น datetime.time พร้อมฟอร์แมต 'h:mm'
+    เพื่อให้ Excel แสดงผลเป็น 7:30, 16:30, 18:30 ตรงตามต้นฉบับทุกจุด
+    """
+    cell.value = target_time
+    cell.number_format = 'h:mm'
+
+
+def read_excel_safely(filepath):
+    """
+    อ่านไฟล์ Excel อย่างปลอดภัย โดยซ่อมแซมแท็ก <fill/> ที่ผิดรูปแบบของระบบภายนอก
+    ในหน่วยความจำก่อนโหลด แก้ปัญหา expected <class 'openpyxl.styles.fills.Fill'>
+    """
+    try:
+        with open(filepath, "rb") as f:
+            raw_bytes = f.read()
+
+        if raw_bytes[:4] == b"PK\x03\x04":
+            zin = zipfile.ZipFile(io.BytesIO(raw_bytes), "r")
+            zout_buf = io.BytesIO()
+            with zipfile.ZipFile(zout_buf, "w") as zout:
+                for item in zin.infolist():
+                    buf = zin.read(item.filename)
+                    if item.filename == "xl/styles.xml":
+                        content = buf.decode("utf-8", errors="ignore")
+                        content = content.replace("<fill/>", '<fill><patternFill patternType="gray125"/></fill>')
+                        buf = content.encode("utf-8")
+                    zout.writestr(item, buf)
+            zin.close()
+            zout_buf.seek(0)
+            return pd.read_excel(zout_buf, header=None)
+        else:
+            return pd.read_excel(filepath, header=None)
+    except Exception:
+        return pd.read_excel(filepath, header=None)
+
+
+def map_workbook_sheets(wb):
+    """
+    สแกนหาชีทรายวันทั้งหมดในไฟล์ STAFF TIME แล้วจับคู่กับ datetime.date
+    """
+    sheet_date_map = {}
+    for name in wb.sheetnames:
+        ws = wb[name]
+        clean = name.strip()
+        
+        m = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$", clean)
+        if m:
+            d = int(m.group(1)); mo = int(m.group(2)); y = int(m.group(3))
+            if y < 100:
+                y += 2000
+            try:
+                sheet_date_map[date(y, mo, d)] = name
+                continue
+            except ValueError:
+                pass
+                
+        m2 = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$", clean)
+        if m2:
+            d = int(m2.group(1)); mo = int(m2.group(2)); y = int(m2.group(3))
+            if y < 100:
+                y += 2000
+            try:
+                sheet_date_map[date(y, mo, d)] = name
+                continue
+            except ValueError:
+                pass
+
+        # ตรวจสอบเนื้อหาในเซลล์หัวตาราง
+        found_cell_date = None
+        for cell_coord in ["D2", "D3", "E2", "C2", "B2"]:
+            cval = ws[cell_coord].value
+            if cval is None:
+                continue
+            if isinstance(cval, datetime):
+                found_cell_date = cval.date()
+                break
+            elif isinstance(cval, date):
+                found_cell_date = cval
+                break
+            else:
+                m_str = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})", str(cval))
+                if m_str:
+                    cd = int(m_str.group(1)); cmo = int(m_str.group(2)); cy = int(m_str.group(3))
+                    if cy < 100:
+                        cy += 2000
+                    try:
+                        found_cell_date = date(cy, cmo, cd)
+                        break
+                    except ValueError:
+                        pass
+        if found_cell_date:
+            sheet_date_map[found_cell_date] = name
+
+    return sheet_date_map
+
+
+def clean_leave_text(raw_val):
+    """
+    ตัดชื่อวันลาภาษาไทยเอาเฉพาะข้อความก่อนเครื่องหมาย '-' เช่น 'ลาป่วย - Sick Leave' -> 'ลาป่วย'
+    """
+    if not raw_val or str(raw_val) == 'nan':
+        return ""
+    text = str(raw_val).strip()
+    if '-' in text:
+        text = text.split('-')[0].strip()
+    return text
+
+
+def get_leave_code(leave_name):
+    """
+    แปลงประเภทการลาเป็นตัวอักษรลงช่อง Q:
+    - ลาพักร้อน -> พ
+    - ลาป่วย -> ป
+    - ลากิจ -> อ
+    - ลาไม่รับเงินเดือน / ลาโดยไม่ได้รับค่าจ้าง / อื่นๆ -> อ
+    """
+    if "ลาพักร้อน" in leave_name:
+        return "พ"
+    elif "ลาป่วย" in leave_name:
+        return "ป"
+    elif "ลากิจ" in leave_name:
+        return "อ"
+    elif "ไม่รับเงินเดือน" in leave_name or "ไม่ได้รับค่าจ้าง" in leave_name:
+        return "อ"
+    return "อ"
+
+
+def parse_leave_duration(dur_raw):
+    """
+    แยกวิเคราะห์ระยะเวลาการลา เช่น '0 วัน 4 ชั่วโมง 150 นาที' -> is_partial=True, hrs=4.25
+    แก้ปัญหาระบบภายนอกส่งนาทีมีเลขศูนย์ต่อท้าย (150 -> 15 นาที, 450 -> 45 นาที, 300 -> 30 นาที)
+    """
+    if dur_raw is None:
+        return False, None
+    dur_str = str(dur_raw).strip()
+    if not dur_str or dur_str.lower() == 'nan':
+        return False, None
+
+    m_d = re.search(r'(\d+)\s*วัน', dur_str)
+    m_h = re.search(r'(\d+)\s*ชั่วโมง', dur_str)
+    m_m = re.search(r'(\d+)\s*นาที', dur_str)
+
+    if m_d or m_h or m_m:
+        days_cnt = int(m_d.group(1)) if m_d else 0
+        hours_cnt = int(m_h.group(1)) if m_h else 0
+        mins_cnt = int(m_m.group(1)) if m_m else 0
+        # แก้ปัญหาระบบภายนอกส่งนาทีมีเลข 0 เกินมา เช่น 150 นาที = 15 นาที, 450 นาที = 45 นาที
+        if mins_cnt in [150, 450, 300] or (mins_cnt >= 60 and mins_cnt % 10 == 0 and (mins_cnt // 10) < 60):
+            mins_cnt = mins_cnt // 10
+        if days_cnt == 0 and (hours_cnt > 0 or mins_cnt > 0):
+            hrs = round(hours_cnt + mins_cnt / 60.0, 2)
+            return True, hrs
+        return False, None
+
+    try:
+        f_dur = float(dur_str)
+        if 0 < f_dur < 1.0:
+            hrs = round(f_dur * 8.0, 2)
+            return True, hrs
+    except Exception:
+        pass
+
+    return False, None
+
+
+COMPANY_HOLIDAYS_2026 = {
+    date(2026, 1, 1): "วันขึ้นปีใหม่",
+    date(2026, 1, 2): "วันหยุดทำการเพิ่มเป็นกรณีพิเศษ",
+    date(2026, 3, 3): "วันมาฆบูชา",
+    date(2026, 4, 13): "วันสงกรานต์",
+    date(2026, 4, 14): "วันสงกรานต์",
+    date(2026, 4, 15): "วันสงกรานต์",
+    date(2026, 5, 1): "วันแรงงานแห่งชาติ",
+    date(2026, 6, 1): "ชดเชยวันวิสาขบูชา",
+    date(2026, 6, 3): "วันเฉลิมพระชนมพรรษา สมเด็จพระนางเจ้าสุทิดาฯ",
+    date(2026, 7, 28): "วันเฉลิมพระชนมพรรษา พระบาทสมเด็จพระเจ้าอยู่หัว",
+    date(2026, 8, 12): "วันเฉลิมพระชนมพรรษา สมเด็จพระนางเจ้าสิริกิติ์ฯ และวันแม่แห่งชาติ",
+    date(2026, 10, 13): "วันนวมินทรมหาราช",
+    date(2026, 10, 23): "วันปิยมหาราช",
+    date(2026, 12, 5): "วันคล้ายวันพระบรมราชสมภพ ร.9 / วันชาติ / วันพ่อแห่งชาติ",
+    date(2026, 12, 31): "วันสิ้นปี",
+}
+
+
+def is_company_holiday(target_date, ws=None):
+    """
+    ตรวจสอบว่าเป็นวันหยุดบริษัทหรือไม่:
+    1. ตรวจสอบตามปฏิทินวันหยุดประจำปี 2569 (2026) ของ บมจ.คริสเตียนีและนีลเส็น (ไทย)
+    2. ตรวจสอบจากในชีทว่ามีการกรอก 'น' ในช่อง Q เป็นจำนวนมาก (>= 3 แถว) หรือไม่
+    """
+    if isinstance(target_date, datetime):
+        target_date = target_date.date()
+    elif not isinstance(target_date, date):
+        return False, None
+
+    if target_date in COMPANY_HOLIDAYS_2026:
+        return True, COMPANY_HOLIDAYS_2026[target_date]
+
+    # ตรวจสอบวันหยุดประจำปีแบบระบุเดือน-วัน
+    month_day_holidays = {
+        (1, 1): "วันขึ้นปีใหม่",
+        (1, 2): "วันหยุดทำการเพิ่มเป็นกรณีพิเศษ",
+        (4, 13): "วันสงกรานต์",
+        (4, 14): "วันสงกรานต์",
+        (4, 15): "วันสงกรานต์",
+        (5, 1): "วันแรงงานแห่งชาติ",
+        (6, 3): "วันเฉลิมพระชนมพรรษา สมเด็จพระนางเจ้าสุทิดาฯ",
+        (7, 28): "วันเฉลิมพระชนมพรรษา พระบาทสมเด็จพระเจ้าอยู่หัว",
+        (8, 12): "วันเฉลิมพระชนมพรรษา สมเด็จพระนางเจ้าสิริกิติ์ฯ และวันแม่แห่งชาติ",
+        (10, 13): "วันนวมินทรมหาราช",
+        (10, 23): "วันปิยมหาราช",
+        (12, 5): "วันพ่อแห่งชาติ / วันชาติ",
+        (12, 31): "วันสิ้นปี",
+    }
+    md = (target_date.month, target_date.day)
+    if md in month_day_holidays:
+        return True, month_day_holidays[md]
+
+    # ตรวจสอบจากข้อมูลในชีท หากมีตัวย่อ 'น' ในช่อง Q ตั้งแต่ 3 แถวขึ้นไป
+    if ws is not None:
+        count_nor = 0
+        max_check = min(ws.max_row, 30)
+        for r in range(2, max_check + 1):
+            val_q = str(ws[f"Q{r}"].value or '').strip()
+            if val_q == 'น':
+                count_nor += 1
+                if count_nor >= 3:
+                    return True, "วันหยุดบริษัท (ตรวจพบ 'น' ในชีท)"
+
+    return False, None
+
+
+def create_audit_report(filepath, audit_rows):
+    """
+    สร้างไฟล์รายงานผลการตรวจสอบ (Audit & Discrepancy Report) ในรูปแบบ Excel (.xlsx)
+    สรุปรายการทั้งหมดที่อัปเดต, ข้ามเพราะสแกนครบ, ไม่พบพนักงาน, หรือข้อมูลขัดแย้ง
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Audit Report"
+    
+    headers = [
+        "ลำดับ", "ชีทวันที่", "รหัสพนักงาน", "ชื่อในไฟล์นำเข้า", 
+        "ชื่อในชีท STAFF TIME", "ประเภทข้อมูล", "สถานะผลลัพธ์", "เวลาสแกนจริงในชีท", "รายละเอียดการทำงาน"
+    ]
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color="1A73E8", end_color="1A73E8", fill_type="solid")
+    header_font = Font(name="Tahoma", size=11, bold=True, color="FFFFFF")
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+    
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(1, col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+    
+    row_font = Font(name="Tahoma", size=10)
+    
+    for idx, item in enumerate(audit_rows, 1):
+        r_vals = [
+            idx,
+            item.get("sheet", ""),
+            item.get("emp_id", ""),
+            item.get("input_name", ""),
+            item.get("sheet_name", ""),
+            item.get("type", ""),
+            item.get("status", ""),
+            item.get("scans", ""),
+            item.get("detail", "")
+        ]
+        ws.append(r_vals)
+        cur_row = ws.max_row
+        ws.row_dimensions[cur_row].height = 22
+        
+        status_val = item.get("status", "")
+        status_fill = None
+        if "ข้าม" in status_val or "ไม่พบ" in status_val:
+            status_fill = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")
+        elif "ขัดแย้ง" in status_val or "ไม่ตรง" in status_val:
+            status_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
+        elif "สำเร็จ" in status_val:
+            status_fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
+            
+        for c_idx in range(1, len(headers) + 1):
+            c = ws.cell(cur_row, c_idx)
+            c.font = row_font
+            c.border = thin_border
+            if status_fill and c_idx == 7:
+                c.fill = status_fill
+            if c_idx in [1, 2, 3, 6, 7, 8]:
+                c.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                c.alignment = Alignment(horizontal="left", vertical="center")
+
+    for col in ws.columns:
+        col_letter = get_column_letter(col[0].column)
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        
+    ws.auto_filter.ref = ws.dimensions
+    wb.save(filepath)
+    wb.close()
+
+
+def parse_approval_records(df_appr, target_dates, log_callback):
+    """
+    อ่านไฟล์การลาที่ได้รับการอนุมัติ คัดกรองเฉพาะแถวที่ตรงกับช่วงวันที่ในไฟล์ STAFF TIME
+    รองรับทั้งการลาวันเดียว และการลาช่วงยาวข้ามเดือน (เช่น 2026-08-10 To 2026-11-07 รวม 90 วัน)
+    """
+    header_idx = -1
+    for i in range(min(15, len(df_appr))):
+        row_str = " ".join([str(x) for x in df_appr.iloc[i].values if pd.notna(x)])
+        if "ประเภทการลา" in row_str or "ชื่อพนักงาน" in row_str or "ชื่อ-นามสกุล" in row_str:
+            header_idx = i
+            break
+            
+    if header_idx == -1:
+        log_callback("⚠️ ไม่พบแถวหัวตารางมาตรฐานในการลาที่ได้รับการอนุมัติ ใช้แถวที่ 2 เป็นค่าเริ่มต้น")
+        header_idx = 1
+
+    df_data = df_appr.iloc[header_idx + 1:].copy().reset_index(drop=True)
+    
+    col_emp = 1    # Col B: ชื่อพนักงาน
+    col_type = 2   # Col C: ประเภทการลา
+    col_date = 3   # Col D: วันที่ลา
+    col_dur = 5    # Col F: จำนวนวันที่ลา
+    
+    records = []
+    seen_entries = set()
+    skipped_count = 0
+    
+    for row_idx, row in df_data.iterrows():
+        if len(row) <= max(col_emp, col_type, col_date):
+            continue
+            
+        emp_raw = row[col_emp]
+        type_raw = row[col_type]
+        date_raw = row[col_date]
+        dur_raw = row[col_dur] if len(row) > col_dur else ""
+        
+        if pd.isna(emp_raw) or pd.isna(type_raw) or pd.isna(date_raw):
+            continue
+            
+        emp_id = extract_emp_id(emp_raw)
+        if not emp_id:
+            continue
+            
+        date_matches = re.findall(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b', str(date_raw))
+        parsed_dates = []
+        for m_str in date_matches:
+            for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                try:
+                    parsed_dates.append(datetime.strptime(m_str, fmt).date())
+                    break
+                except ValueError:
+                    pass
+                    
+        if len(parsed_dates) == 1 and len(row) > 4 and pd.notna(row[4]):
+            m_col4 = re.findall(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b', str(row[4]))
+            for m_str in m_col4:
+                for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                    try:
+                        parsed_dates.append(datetime.strptime(m_str, fmt).date())
+                        break
+                    except ValueError:
+                        pass
+                        
+        if not parsed_dates:
+            continue
+            
+        start_date = min(parsed_dates)
+        end_date = max(parsed_dates)
+        
+        is_partial, hrs = parse_leave_duration(dur_raw)
+                
+        cur_d = start_date
+        while cur_d <= end_date:
+            if cur_d in target_dates:
+                entry_key = (emp_id, cur_d.isoformat(), str(type_raw).strip())
+                if entry_key in seen_entries:
+                    skipped_count += 1
+                else:
+                    seen_entries.add(entry_key)
+                    records.append({
+                        'emp_id': emp_id,
+                        'emp_raw': str(emp_raw).strip(),
+                        'date': cur_d,
+                        'leave_type_raw': type_raw,
+                        'is_partial': is_partial,
+                        'hours': hrs,
+                        'start_time_raw': str(date_raw),
+                        'end_time_raw': str(date_raw)
+                    })
+            cur_d += timedelta(days=1)
+            
+    if skipped_count > 0:
+        log_callback(f"ℹ️ พบข้อมูลวันลาที่ซ้ำกันในการลาที่ได้รับการอนุมัติและข้ามไป: {skipped_count} รายการ")
+    return records
+
+
+def parse_attendance_records(df_att, target_dates, log_callback):
+    """
+    อ่านไฟล์ใบแจ้งการมาทำงาน (CNTIWEB) คัดกรองเฉพาะวันที่ตรงกับไฟล์ STAFF TIME
+    """
+    header_idx = -1
+    for i in range(min(15, len(df_att))):
+        row_str = " ".join([str(x) for x in df_att.iloc[i].values if pd.notna(x)])
+        if "ชื่อ-นามสกุล" in row_str and "เวลา" in row_str:
+            header_idx = i
+            break
+            
+    if header_idx == -1:
+        log_callback("⚠️ ไม่พบแถวหัวตารางมาตรฐานในใบแจ้งการมาทำงาน ใช้แถวที่ 4 เป็นค่าเริ่มต้น")
+        header_idx = 3
+
+    df_data = df_att.iloc[header_idx + 1:].copy().reset_index(drop=True)
+    
+    col_emp = 2    # Col C: ชื่อ-นามสกุล
+    col_type = 4   # Col E: ประเภท
+    col_date = 5   # Col F: วันที่
+    col_time = 6   # Col G: เวลาเข้า-ออก
+    
+    records = []
+    seen_keys = set()
+    
+    for row_idx, row in df_data.iterrows():
+        emp_raw = row[col_emp]
+        type_raw = row[col_type]
+        date_val = row[col_date]
+        time_raw = row[col_time]
+        
+        if pd.isna(emp_raw) or pd.isna(date_val) or pd.isna(time_raw):
+            continue
+            
+        emp_id = extract_emp_id(emp_raw)
+        if not emp_id:
+            continue
+            
+        dt = None
+        if isinstance(date_val, (datetime, date)):
+            dt = date_val.date() if isinstance(date_val, datetime) else date_val
+        else:
+            m_d = re.search(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b', str(date_val))
+            if m_d:
+                for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                    try:
+                        dt = datetime.strptime(m_d.group(0), fmt).date()
+                        break
+                    except ValueError:
+                        pass
+        if not dt or dt not in target_dates:
+            continue
+            
+        t_dec = to_decimal_hours(time_raw)
+        if t_dec is None:
+            continue
+            
+        target_col = None
+        target_time_obj = None
+        
+        # กฎเวลา: เช้าเริ่มตั้งแต่ 04:00 - 11:30 น. (เพื่อรองรับคนมาเช้าตรู่)
+        if 4.0 <= t_dec <= 11.5:
+            target_col = 'L'
+            target_time_obj = time(7, 30)
+        elif t_dec > 11.5:  # เย็น เริ่ม 16:30 ปัดเศษลงช่วงละ 30 นาที
+            target_col = 'M'
+            target_time_obj = calculate_checkout_time(time_raw)
+            
+        if not target_col:
+            continue
+            
+        rec_key = (emp_id, dt.isoformat(), target_col, str(target_time_obj))
+        if rec_key in seen_keys:
+            continue
+        seen_keys.add(rec_key)
+        
+        records.append({
+            'emp_id': emp_id,
+            'emp_raw': emp_raw,
+            'date': dt,
+            'target_col': target_col,
+            'target_time': target_time_obj,
+            'orig_time': time_raw
+        })
+        
+    return records
+
+
+# -------------------------------------------------------------
+# แกนกลางประเมินและตัดสินใจ (Shared Business Logic Engine)
+# รวมลอจิกเป็นหนึ่งเดียว: ป้องกัน Preview กับ Real Run ไม่ตรงกัน
+# -------------------------------------------------------------
+
+def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, col_config=None):
+    """
+    ฟังก์ชันแกนกลางตัวเดียวที่ตัดสินใจตรวจสอบ Safeguard, ตรวจชื่อ-รหัส, ตรวจความขัดแย้ง
+    และคำนวณเซลล์ที่จะแก้ไข คืนค่า (summary, evaluated_items) ใช้ร่วมกันทั้ง Preview และ Run จริง
+    """
+    cfg = col_config or get_default_column_config()
+    emp_id_col = cfg.get('emp_id_col', 'A').upper().strip() or 'A'
+    emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
+    scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
+    leave_type_col = cfg.get('leave_type_col', 'G').upper().strip() or 'G'
+    checkin_col = cfg.get('checkin_col', 'L').upper().strip() or 'L'
+    checkout_col = cfg.get('checkout_col', 'M').upper().strip() or 'M'
+    leave_code_col = cfg.get('leave_code_col', 'Q').upper().strip() or 'Q'
+    try:
+        start_row = int(cfg.get('start_row', 2))
+    except Exception:
+        start_row = 2
+
+    # ดัชนีพนักงานประจำแต่ละชีท
+    # ดัชนีพนักงานประจำแต่ละชีท (จับคู่ตรงด้วยรหัสพนักงานเป็นหลัก 100%)
+    sheet_emp_id_map = {}
+    all_employees = set()
+
+    for dt, sheet_name in sheet_date_map.items():
+        ws = wb[sheet_name]
+        emp_id_rows = {}
+        for row in range(start_row, ws.max_row + 1):
+            val_id = ws[f"{emp_id_col}{row}"].value
+            val_name = ws[f"{emp_name_col}{row}"].value
+            eid = extract_emp_id(val_id) if val_id is not None else ""
+            raw_name = str(val_name).strip() if val_name is not None and str(val_name) != 'nan' else ""
+
+            if eid:
+                emp_id_rows[eid] = (row, raw_name)
+                all_employees.add((eid, raw_name))
+
+        sheet_emp_id_map[sheet_name] = emp_id_rows
+
+    def find_emp_row(sheet_name, emp_id, emp_raw_name):
+        id_map = sheet_emp_id_map.get(sheet_name, {})
+        if emp_id in id_map:
+            row, s_name = id_map[emp_id]
+            return row, s_name, 'ok', ""
+        return None, "", 'not_found', f"ไม่พบรหัส {emp_id} ในตารางชีทนี้"
+
+    full_day_leaves = {}
+    for rec in leave_records:
+        if not rec.get('is_partial', False):
+            full_day_leaves[(rec['emp_id'], rec['date'])] = rec
+
+    evaluated_items = []
+    counts = {
+        'total': len(leave_records) + len(attendance_records),
+        'update': 0,
+        'skip_scan': 0,
+        'skip_dup': 0,
+        'conflict': 0,
+        'mismatch': 0,
+        'not_found': 0,
+        'leave_updates': 0,
+        'leave_skips': 0,
+        'attend_updates': 0,
+        'attend_skips': 0,
+    }
+
+    # 1. ประเมินการลาที่ได้รับการอนุมัติ
+    for rec in leave_records:
+        sheet_name = sheet_date_map.get(rec['date'])
+        if not sheet_name:
+            continue
+        ws = wb[sheet_name]
+        clean_name = clean_leave_text(rec['leave_type_raw'])
+        leave_code = get_leave_code(clean_name)
+        is_partial = rec.get('is_partial', False)
+        hrs = rec.get('hours', None)
+
+        row, s_name, m_type, m_msg = find_emp_row(sheet_name, rec['emp_id'], rec['emp_raw'])
+
+        if m_type == 'not_found':
+            counts['not_found'] += 1
+            counts['leave_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': '-', 'type': 'วันลา',
+                'leave_type': clean_name, 'status': '⚠️ ไม่พบพนักงานในชีท', 'status_type': 'not_found',
+                'scans': '-', 'target_cells': '-', 'action': 'ข้าม: ไม่พบรหัสและชื่อพนักงานในชีทนี้',
+                'detail': m_msg, 'row': None, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": "-", "type": "วันลา", "status": "⚠️ ไม่พบพนักงานในชีท", "scans": "-", "detail": m_msg}
+            })
+            continue
+
+
+        scan_val = ws[f"{scan_col}{row}"].value
+        h_in, h_out, scans_list, e_min, e_max = check_fingerprint_scans(scan_val)
+        scans_str = ", ".join(scans_list) if scans_list else "-"
+
+        if h_in and h_out:
+            if not is_partial:
+                counts['skip_scan'] += 1
+                counts['leave_skips'] += 1
+                evaluated_items.append({
+                    'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                    'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันลา',
+                    'leave_type': clean_name, 'status': '⚠️ ข้าม: สแกนนิ้วครบแล้ว', 'status_type': 'skip_scan',
+                    'scans': scans_str, 'target_cells': f"{leave_type_col}{row}", 'action': f"ข้าม: พบสแกนเข้า-ออกครบ ({scans_str}) อาจกรอกลาผิดวัน",
+                    'detail': f"มีการสแกนนิ้วทั้งเข้าและออก ข้ามการบันทึก '{clean_name}'", 'row': row, 'cell_updates': {},
+                    'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันลา", "status": "⚠️ ข้าม: สแกนนิ้วครบแล้ว", "scans": scans_str, "detail": f"สแกนนิ้วครบทั้งเข้า-ออก ({scans_str}) ข้าม '{clean_name}'"}
+                })
+                continue
+            elif e_min is not None and e_max is not None and e_min <= 7.58 and e_max >= 16.5:
+                counts['skip_scan'] += 1
+                counts['leave_skips'] += 1
+                evaluated_items.append({
+                    'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                    'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันลา',
+                    'leave_type': clean_name, 'status': '⚠️ ข้าม: สแกนครบเต็มเวลาปกติ', 'status_type': 'skip_scan',
+                    'scans': scans_str, 'target_cells': f"{leave_type_col}{row}", 'action': f"ข้าม: สแกนเต็มเวลาปกติ ({scans_str}) ข้าม '{clean_name}'",
+                    'detail': f"สแกนเข้า {e_min:.2f} และออก {e_max:.2f} เต็มเวลาปกติ", 'row': row, 'cell_updates': {},
+                    'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันลา", "status": "⚠️ ข้าม: สแกนครบเต็มเวลาปกติ", "scans": scans_str, "detail": f"สแกนนิ้วเต็มเวลาปกติ ({scans_str}) ข้าม '{clean_name}'"}
+                })
+                continue
+
+        cell_g_val = str(ws[f"{leave_type_col}{row}"].value or '').strip()
+        cell_q_val = str(ws[f"{leave_code_col}{row}"].value or '').strip()
+        is_unpaid = ("ไม่ได้รับค่าจ้าง" in clean_name) or ("unpaid" in clean_name.lower())
+
+        # ตรวจสอบเงื่อนไขวันหยุดบริษัท:
+        # กฎ: ในกรณีที่เป็นวันหยุดบริษัท จะไม่เอาเงื่อนไขการลาใดๆ ไปกรอกลงช่อง G เลย
+        # - คนที่ไม่มีสแกน: บังคับกรอก 'น' ในช่อง Q และช่อง G ต้องว่างเปล่า (ล้างค่าวันลาออก)
+        # - คนที่มีสแกน: ปล่อยตามสูตรคำนวณของ Excel (ไม่กรอก 'น' และไม่ลงวันลาในช่อง G)
+        is_holiday, holiday_name = is_company_holiday(rec['date'], ws)
+        if is_holiday:
+            if h_in or h_out:
+                # มีสแกนทำงาน: ปล่อยตามสูตรคำนวณ ไม่ลงวันลาใดๆ
+                cell_updates = {}
+                target_cells_list = []
+                mod_actions = []
+
+                if cell_g_val and cell_g_val != "None":
+                    cell_updates[f"{leave_type_col}{row}"] = None
+                    mod_actions.append(f"ล้างข้อความวันลาช่อง {leave_type_col}{row} (วันหยุดบริษัทมีสแกนทำงาน)")
+                    target_cells_list.append(f"{leave_type_col}{row}")
+
+                if cell_q_val and not cell_q_val.startswith("=") and cell_q_val in ['พ', 'ป', 'อ', 'น']:
+                    cell_updates[f"{leave_code_col}{row}"] = f"=+P{row}-1"
+                    mod_actions.append(f"คืนค่าสูตรคำนวณช่อง {leave_code_col}{row} ➔ '=+P{row}-1'")
+                    target_cells_list.append(f"{leave_code_col}{row}")
+
+                if not cell_updates:
+                    counts['leave_skips'] += 1
+                    evaluated_items.append({
+                        'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                        'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันหยุดบริษัท',
+                        'leave_type': '-', 'status': '⚠️ ข้าม: วันหยุดบริษัท (มีสแกน)', 'status_type': 'skip_scan',
+                        'scans': scans_str, 'target_cells': '-', 'action': f"ข้าม: พบสแกน ({scans_str}) ในวันหยุดบริษัท ({holiday_name}) ปล่อยคำนวณตามสูตร",
+                        'detail': f"วันหยุดบริษัท ({holiday_name}) และมีสแกนเข้า/ออก ({scans_str}) ไม่บันทึกการลา ปล่อยคำนวณตามสูตร",
+                        'row': row, 'cell_updates': {},
+                        'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันหยุดบริษัท", "status": "⚠️ ข้าม (มีสแกน)", "scans": scans_str, "detail": f"มีสแกนทำงานในวันหยุด ({holiday_name}) ปล่อยตามสูตร"}
+                    })
+                else:
+                    counts['update'] += 1
+                    counts['leave_updates'] += 1
+                    action_str = " | ".join(mod_actions)
+                    evaluated_items.append({
+                        'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                        'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันหยุดบริษัท',
+                        'leave_type': '-', 'status': '✅ จะอัปเดต', 'status_type': 'update',
+                        'scans': scans_str, 'target_cells': ", ".join(target_cells_list),
+                        'action': f"วันหยุดบริษัท ({holiday_name}): {action_str}",
+                        'detail': f"พบสแกน ({scans_str}) ในวันหยุด ➔ ล้างวันลาและคืนค่าสูตรคำนวณ",
+                        'row': row, 'cell_updates': cell_updates,
+                        'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันหยุดบริษัท", "status": "✅ ปรับคืนสูตร", "scans": scans_str, "detail": action_str}
+                    })
+                continue
+            else:
+                # ไม่มีสแกน: บังคับกรอก 'น' ในช่อง Q และช่อง G ต้องว่างเปล่า (ไม่ใส่อะไร)
+                cell_updates = {}
+                mod_actions = []
+                target_cells_list = []
+
+                if cell_q_val != 'น':
+                    cell_updates[f"{leave_code_col}{row}"] = 'น'
+                    mod_actions.append(f"บันทึกตัวย่อช่อง {leave_code_col}{row} ➔ 'น'")
+                    target_cells_list.append(f"{leave_code_col}{row}")
+
+                if cell_g_val and cell_g_val != "None":
+                    cell_updates[f"{leave_type_col}{row}"] = None
+                    mod_actions.append(f"ล้างข้อความช่อง {leave_type_col}{row} (ไม่ต้องใส่อะไร)")
+                    target_cells_list.append(f"{leave_type_col}{row}")
+
+                if not cell_updates:
+                    counts['skip_dup'] += 1
+                    counts['leave_skips'] += 1
+                    evaluated_items.append({
+                        'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                        'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันหยุดบริษัท',
+                        'leave_type': 'วันหยุด (น)', 'status': 'ℹ️ ข้าม: วันหยุดบริษัท (ลง "น" แล้ว)', 'status_type': 'skip_dup',
+                        'scans': scans_str, 'target_cells': f"{leave_code_col}{row}",
+                        'action': f"ข้าม: วันหยุดบริษัท ({holiday_name}) ช่อง {leave_code_col}{row} มี 'น' และช่อง {leave_type_col}{row} ว่างอยู่แล้ว",
+                        'detail': f"วันหยุดบริษัท ({holiday_name}) ลง 'น' ครบถ้วนแล้ว", 'row': row, 'cell_updates': {},
+                        'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันหยุดบริษัท", "status": "ℹ️ ข้าม (มี น อยู่แล้ว)", "scans": scans_str, "detail": f"วันหยุด {holiday_name} มี 'น' เรียบร้อย"}
+                    })
+                else:
+                    counts['update'] += 1
+                    counts['leave_updates'] += 1
+                    action_str = " | ".join(mod_actions)
+                    evaluated_items.append({
+                        'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                        'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันหยุดบริษัท',
+                        'leave_type': 'วันหยุด (น)', 'status': '✅ จะอัปเดต', 'status_type': 'update',
+                        'scans': scans_str, 'target_cells': ", ".join(target_cells_list),
+                        'action': f"วันหยุดบริษัท ({holiday_name}): {action_str}",
+                        'detail': f"วันหยุดบริษัท ({holiday_name}) ไม่มีสแกน ➔ บังคับกรอก 'น' และช่อง G ว่างเปล่า",
+                        'row': row, 'cell_updates': cell_updates,
+                        'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันหยุดบริษัท", "status": "✅ บันทึก 'น'", "scans": scans_str, "detail": action_str}
+                    })
+                continue
+
+        display_leave = f"{clean_name} {hrs:g} ชม." if (is_partial and hrs is not None) else clean_name
+
+        # วางแผนบันทึกค่าลงในแต่ละช่อง
+        mod_actions = []
+        cell_updates = {}
+        target_cells_list = []
+
+        # 1. จัดการข้อความประเภทการลาในช่อง G (leave_type_col)
+        if display_leave not in cell_g_val:
+            if cell_g_val and cell_g_val != "None":
+                new_g = f"{cell_g_val} / {display_leave}"
+                mod_actions.append(f"รวมช่อง {leave_type_col}{row} ➔ '{new_g}'")
+                cell_updates[f"{leave_type_col}{row}"] = new_g
+            else:
+                mod_actions.append(f"บันทึกช่อง {leave_type_col}{row} ➔ '{display_leave}'")
+                cell_updates[f"{leave_type_col}{row}"] = display_leave
+            target_cells_list.append(f"{leave_type_col}{row}")
+
+        # 2. จัดการตัวอักษรย่อในช่อง Q (leave_code_col เช่น ป, พ, อ)
+        # กฎ: สถานะใช้กับ "ลาเต็มวัน" อย่างเดียว (รวมลาโดยไม่ได้รับค่าจ้าง ให้ลงตัวย่อ 'อ' ในช่อง Q ด้วย)
+        if not is_partial:
+            if leave_code and (leave_code not in cell_q_val or cell_q_val == "None"):
+                new_q = f"{cell_q_val}/{leave_code}" if (cell_q_val and cell_q_val != "None" and not cell_q_val.startswith("=")) else leave_code
+                mod_actions.append(f"บันทึกตัวย่อช่อง {leave_code_col}{row} ➔ '{new_q}'")
+                cell_updates[f"{leave_code_col}{row}"] = new_q
+                target_cells_list.append(f"{leave_code_col}{row}")
+
+        # 3. จัดการเวลาเข้า-ออก กรณีลาไม่เต็มวัน (Partial Leave เช่น ครึ่งวัน/รายชั่วโมง)
+        if is_partial and hrs is not None:
+            # แยกแยะว่าเป็นการลาครึ่งวันบ่าย หรือ ลาครึ่งวันเช้า
+            # - ลาครึ่งวันบ่าย: เช้ามาทำงาน แต่ช่วงบ่ายลา (สแกนครั้งสุดท้ายก่อน 13:00)
+            # - ลาครึ่งวันเช้า: เช้าลา แต่ช่วงบ่ายมาทำงาน (มีสแกนหลัง 13:00)
+            is_afternoon_leave = False
+            if e_max is not None:
+                is_afternoon_leave = (e_max < 13.0)
+            else:
+                start_raw_str = str(rec.get('start_time_raw', ''))
+                m_t = re.search(r'(\d{1,2}):(\d{2})', start_raw_str)
+                is_afternoon_leave = (int(m_t.group(1)) >= 12) if m_t else True
+
+            if is_afternoon_leave:
+                # ถ้าลาครึ่งวันบ่าย: ไม่ใส่สถานะช่อง Q และไม่แตะต้องช่อง L (ปล่อยตามเวลาสแกนเช้าจริง/สูตรเดิม) แต่จะปรับช่อง M ให้เลิก 16:30
+                cell_m_cur = ws[f"{checkout_col}{row}"].value
+                is_m_1630 = (isinstance(cell_m_cur, time) and cell_m_cur.hour == 16 and cell_m_cur.minute == 30) or (isinstance(cell_m_cur, str) and re.match(r'^16:30', cell_m_cur.strip()))
+                if not is_m_1630:
+                    cell_updates[f"{checkout_col}{row}"] = time(16, 30)
+                    mod_actions.append(f"ปรับเวลาออก (ลาบ่าย) {checkout_col}{row} ➔ 16:30")
+                    target_cells_list.append(f"{checkout_col}{row}")
+            else:
+                # ถ้าลาเช้า บ่ายมาทำ: แก้เวลาเข้า เป็น 7:30 ไม่แตะต้องขาออก (ให้ใช้เวลาตามจริงในชีท) และไม่ลงสถานะช่อง Q
+                cell_l_cur = ws[f"{checkin_col}{row}"].value
+                is_l_set = (isinstance(cell_l_cur, time) and cell_l_cur.hour == 7 and cell_l_cur.minute == 30) or (isinstance(cell_l_cur, str) and re.match(r'^0?7:30', cell_l_cur.strip()))
+                if not is_l_set:
+                    cell_updates[f"{checkin_col}{row}"] = time(7, 30)
+                    mod_actions.append(f"ปรับเวลาเข้า (ลาเช้า) {checkin_col}{row} ➔ 7:30")
+                    target_cells_list.append(f"{checkin_col}{row}")
+
+        # หากมีข้อมูลเป้าหมายครบถ้วนอยู่แล้วทุกช่อง ให้ถือว่าข้าม
+        if not cell_updates:
+            counts['skip_dup'] += 1
+            counts['leave_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันลา',
+                'leave_type': clean_name, 'status': 'ℹ️ ข้าม: มีข้อมูลเดิมอยู่แล้ว', 'status_type': 'skip_dup',
+                'scans': scans_str, 'target_cells': f"{leave_type_col}{row}", 'action': f"ข้าม: ช่อง {leave_type_col}{row} มี '{display_leave}' และเวลาตรงอยู่แล้ว",
+                'detail': f"ข้อมูลเดิมในช่อง: {cell_g_val}", 'row': row, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันลา", "status": "ℹ️ ข้าม: ข้อมูลเดิมซ้ำ", "scans": scans_str, "detail": f"มีข้อมูล '{display_leave}' ครบถ้วนแล้ว"}
+            })
+            continue
+
+        counts['update'] += 1
+        counts['leave_updates'] += 1
+        action_str = " | ".join(mod_actions)
+        evaluated_items.append({
+            'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+            'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'วันลา',
+            'leave_type': clean_name, 'status': '✅ จะอัปเดต', 'status_type': 'update',
+            'scans': scans_str, 'target_cells': ", ".join(target_cells_list), 'action': action_str,
+            'detail': f"{'ลาไม่เต็มวัน' if is_partial else 'ลาเต็มวัน'} ({clean_name})" + (f" [{m_msg}]" if m_msg else ""),
+            'row': row, 'cell_updates': cell_updates,
+            'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "วันลา", "status": "✅ อัปเดตสำเร็จ", "scans": scans_str, "detail": action_str}
+        })
+
+    # 2. ประเมินใบแจ้งการมาทำงาน
+    for rec in attendance_records:
+        sheet_name = sheet_date_map.get(rec['date'])
+        if not sheet_name:
+            continue
+        ws = wb[sheet_name]
+        attend_type = 'เช้า (07:30)' if rec['target_col'] == 'L' else 'เย็น (ปัดเศษ 30 นาที)'
+
+        row, s_name, m_type, m_msg = find_emp_row(sheet_name, rec['emp_id'], rec['emp_raw'])
+
+        if m_type == 'not_found':
+            counts['not_found'] += 1
+            counts['attend_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': '-', 'type': 'แจ้งเวลา',
+                'attend_type': attend_type, 'status': '⚠️ ไม่พบพนักงานในชีท', 'status_type': 'not_found',
+                'scans': '-', 'target_cells': '-', 'action': 'ข้าม: ไม่พบรหัสและชื่อพนักงานในชีทนี้',
+                'detail': m_msg, 'row': None, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": "-", "type": "แจ้งเวลา", "status": "⚠️ ไม่พบพนักงานในชีท", "scans": "-", "detail": m_msg}
+            })
+            continue
+
+
+        if (rec['emp_id'], rec['date']) in full_day_leaves:
+            l_rec = full_day_leaves[(rec['emp_id'], rec['date'])]
+            l_cln = clean_leave_text(l_rec['leave_type_raw'])
+            counts['conflict'] += 1
+            counts['attend_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'แจ้งเวลา',
+                'attend_type': attend_type, 'status': '⚡ ข้อมูลขัดแย้ง: ลาชนแจ้งเวลา', 'status_type': 'conflict',
+                'scans': '-', 'target_cells': '-', 'action': f"ข้าม: พบวันลาเต็มวัน '{l_cln}' ในวันเดียวกัน ยึดวันลาเป็นหลัก",
+                'detail': f"ชนกับวันลาเต็มวัน '{l_cln}'", 'row': row, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "⚡ ข้อมูลขัดแย้ง: ลาชนแจ้งเวลา", "scans": "-", "detail": f"พบวันลาเต็มวัน '{l_cln}' ชนกับใบแจ้งเวลาในวันเดียวกัน ยึดวันลาเป็นหลัก"}
+            })
+            continue
+
+        target_col = rec['target_col']
+        target_time_obj = rec['target_time']
+        actual_target_col = checkin_col if target_col == 'L' else checkout_col
+
+        scan_val = ws[f"{scan_col}{row}"].value
+        h_in, h_out, scans_list, e_min, e_max = check_fingerprint_scans(scan_val)
+        scans_str = ", ".join(scans_list) if scans_list else "-"
+
+        if h_in and h_out:
+            counts['skip_scan'] += 1
+            counts['attend_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'แจ้งเวลา',
+                'attend_type': attend_type, 'status': '⚠️ ข้าม: สแกนนิ้วครบแล้ว', 'status_type': 'skip_scan',
+                'scans': scans_str, 'target_cells': f"{actual_target_col}{row}", 'action': f"ข้าม: มีสแกนนิ้วครบทั้งเข้า-ออก ({scans_str}) อาจกรอกแจ้งผิดวัน",
+                'detail': "มีสแกนครบทั้งเข้าและออก", 'row': row, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "⚠️ ข้าม: สแกนนิ้วครบแล้ว", "scans": scans_str, "detail": f"สแกนนิ้วครบทั้งเข้า-ออกแล้ว ({scans_str}) อาจกรอกแจ้งผิดวัน"}
+            })
+            continue
+
+        if target_col == 'L' and h_in:
+            counts['skip_scan'] += 1
+            counts['attend_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'แจ้งเวลา',
+                'attend_type': attend_type, 'status': 'ℹ️ ข้าม: มีสแกนเข้าอยู่แล้ว', 'status_type': 'skip_scan',
+                'scans': scans_str, 'target_cells': f"{actual_target_col}{row}", 'action': f"ข้าม: มีสแกนเข้างานช่วงเช้าแล้ว ({scans_str}) ไม่ต้องใช้ใบแจ้งฯ",
+                'detail': "พบสแกนเข้างานเช้า", 'row': row, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "ℹ️ ข้าม: มีสแกนเข้าอยู่แล้ว", "scans": scans_str, "detail": f"พบสแกนเข้างาน {scans_str} อยู่แล้ว ไม่จำเป็นต้องใช้ใบแจ้งเวลา"}
+            })
+            continue
+
+        if target_col == 'M' and h_out and e_max is not None and e_max >= 16.5:
+            counts['skip_scan'] += 1
+            counts['attend_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'แจ้งเวลา',
+                'attend_type': attend_type, 'status': 'ℹ️ ข้าม: มีสแกนออกอยู่แล้ว', 'status_type': 'skip_scan',
+                'scans': scans_str, 'target_cells': f"{actual_target_col}{row}", 'action': f"ข้าม: มีสแกนออกงานแล้ว ({scans_str}) ไม่ต้องใช้ใบแจ้งฯ",
+                'detail': "พบสแกนออกงานเย็น >= 16:30", 'row': row, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "ℹ️ ข้าม: มีสแกนออกอยู่แล้ว", "scans": scans_str, "detail": f"พบสแกนออกงาน {scans_str} อยู่แล้ว ไม่จำเป็นต้องใช้ใบแจ้งเวลา"}
+            })
+            continue
+
+        time_cell_val = ws[f"{actual_target_col}{row}"].value
+        curr_dec = to_decimal_hours(time_cell_val)
+        targ_dec = target_time_obj.hour + target_time_obj.minute / 60.0
+
+        if curr_dec is not None and abs(curr_dec - targ_dec) < 0.01:
+            counts['skip_dup'] += 1
+            counts['attend_skips'] += 1
+            evaluated_items.append({
+                'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+                'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'แจ้งเวลา',
+                'attend_type': attend_type, 'status': 'ℹ️ ข้าม: เวลาตรงกันอยู่แล้ว', 'status_type': 'skip_dup',
+                'scans': scans_str, 'target_cells': f"{actual_target_col}{row}", 'action': f"ข้าม: ช่อง {actual_target_col}{row} เป็นเวลา {target_time_obj.hour}:{target_time_obj.minute:02d} อยู่แล้ว",
+                'detail': "เวลาเดิมตรงกับเป้าหมาย", 'row': row, 'cell_updates': {},
+                'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "ℹ️ ข้าม: เวลาตรงกันอยู่แล้ว", "scans": scans_str, "detail": f"เวลาในช่อง {actual_target_col} ตรงกับ {target_time_obj.hour}:{target_time_obj.minute:02d} อยู่แล้ว"}
+            })
+            continue
+
+        time_label = f"{target_time_obj.hour}:{target_time_obj.minute:02d}"
+        mod_actions = [f"บันทึกเวลาช่อง {actual_target_col}{row} ➔ {time_label} (แจ้งเดิม: {rec['orig_time']})"]
+        cell_updates = {f"{actual_target_col}{row}": target_time_obj}
+
+        cell_g_val = str(ws[f"{leave_type_col}{row}"].value or '').strip()
+        if "มีใบแจ้งฯ" not in cell_g_val:
+            new_g = f"{cell_g_val} / มีใบแจ้งฯ" if (cell_g_val and cell_g_val != "None") else "มีใบแจ้งฯ"
+            mod_actions.append(f"เติมช่อง {leave_type_col}{row} ➔ '{new_g}'")
+            cell_updates[f"{leave_type_col}{row}"] = new_g
+
+        counts['update'] += 1
+        counts['attend_updates'] += 1
+        action_str = " | ".join(mod_actions)
+        evaluated_items.append({
+            'sheet': sheet_name, 'date': rec['date'], 'emp_id': rec['emp_id'],
+            'input_name': rec['emp_raw'], 'sheet_name': s_name, 'type': 'แจ้งเวลา',
+            'attend_type': attend_type, 'status': '✅ จะอัปเดต', 'status_type': 'update',
+            'scans': scans_str, 'target_cells': f"{actual_target_col}{row}, {leave_type_col}{row}",
+            'action': action_str, 'detail': f"แจ้งเวลา {rec['orig_time']} ➔ {time_label}" + (f" [{m_msg}]" if m_msg else ""),
+            'row': row, 'cell_updates': cell_updates,
+            'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "✅ อัปเดตสำเร็จ", "scans": scans_str, "detail": action_str}
+        })
+
+    target_dates = set(sheet_date_map.keys())
+    d_min = min(target_dates) if target_dates else date.today()
+    d_max = max(target_dates) if target_dates else date.today()
+
+    summary = {
+        'total_items': len(evaluated_items),
+        'updates_count': counts['update'],
+        'skips_count': len(evaluated_items) - counts['update'],
+        'leave_updates': counts['leave_updates'],
+        'leave_skips': counts['leave_skips'],
+        'attend_updates': counts['attend_updates'],
+        'attend_skips': counts['attend_skips'],
+        'skip_scan_count': counts['skip_scan'],
+        'skip_dup_count': counts['skip_dup'],
+        'conflict_count': counts['conflict'],
+        'mismatch_count': counts['mismatch'],
+        'not_found_count': counts['not_found'],
+        'sheets_count': len(sheet_date_map),
+        'total_employees': len(all_employees),
+        'date_range': f"{d_min.strftime('%d/%m/%Y')} ถึง {d_max.strftime('%d/%m/%Y')}"
+    }
+
+    return summary, evaluated_items
+
+
+# -------------------------------------------------------------
+# ระบบจำลองการแก้ไขล่วงหน้า & สถิติโครงการ (Preview & Analytics)
+# -------------------------------------------------------------
+
+def simulate_all_changes(main_filepath, approval_filepath=None, attendance_filepath=None, col_config=None, log_callback=None, progress_callback=None):
+    """
+    จำลองการประมวลผลจริงทั้งหมดโดยไม่แก้ไขไฟล์หลัก (Dry-run Simulation)
+    คืนค่า (summary, preview_items) ผ่าน evaluate_all_records ร่วมกับระบบประมวลผลจริง
+    """
+    log_callback = log_callback or (lambda msg: None)
+    progress_callback = progress_callback or (lambda p: None)
+
+    cfg = col_config or get_default_column_config()
+    progress_callback(10)
+    log_callback("🔍 เริ่มต้นจำลองการประมวลผล (Pre-Check Preview)...")
+
+    wb = openpyxl.load_workbook(main_filepath, data_only=True)
+    sheet_date_map = map_workbook_sheets(wb)
+    if not sheet_date_map:
+        wb.close()
+        raise ValueError("ไม่พบชีทวันที่ในไฟล์ STAFF TIME")
+
+    progress_callback(35)
+    log_callback(f"📅 พบชีทรายวัน {len(sheet_date_map)} ชีทในไฟล์ STAFF TIME")
+
+    target_dates = set(sheet_date_map.keys())
+    leave_records = []
+    if approval_filepath and os.path.exists(approval_filepath):
+        df_appr = read_excel_safely(approval_filepath)
+        leave_records = parse_approval_records(df_appr, target_dates, log_callback)
+
+    attendance_records = []
+    if attendance_filepath and os.path.exists(attendance_filepath):
+        df_att = read_excel_safely(attendance_filepath)
+        attendance_records = parse_attendance_records(df_att, target_dates, log_callback)
+
+    progress_callback(65)
+    log_callback("⚙️ กำลังประเมินเงื่อนไข Safeguard และจับคู่ชื่อ-รหัสพนักงาน...")
+    summary, items = evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, cfg)
+    wb.close()
+
+    progress_callback(95)
+    log_callback(f"✅ จำลองเสร็จสิ้น: พบทั้งหมด {len(items)} รายการ (จะอัปเดต {summary['updates_count']} / ข้าม {summary['skips_count']})")
+    return summary, items
+
+
+def get_project_analytics(main_filepath, approval_filepath=None, attendance_filepath=None, col_config=None):
+    """
+    สรุปสถิติภาพรวมประจำงวดของโครงการ ทั้งวันลา การแจ้งเวลา และความถูกต้อง
+    อ่าน leave_type และ attend_type ตรงจากผลการจำลอง ปราศจากบั๊กตัดข้อความ
+    """
+    summary, items = simulate_all_changes(main_filepath, approval_filepath, attendance_filepath, col_config)
+    
+    leave_types_count = {}
+    attend_types_count = {'เช้า (07:30)': 0, 'เย็น (ปัดเศษ 30 นาที)': 0}
+    
+    for item in items:
+        if item['type'] == 'วันลา':
+            l_type = item.get('leave_type') or 'ไม่ระบุประเภท'
+            leave_types_count[l_type] = leave_types_count.get(l_type, 0) + 1
+        elif item['type'] == 'แจ้งเวลา':
+            a_type = item.get('attend_type') or 'เช้า (07:30)'
+            attend_types_count[a_type] = attend_types_count.get(a_type, 0) + 1
+            
+    return {
+        'summary': summary,
+        'leave_breakdown': leave_types_count,
+        'attend_breakdown': attend_types_count,
+        'total_items': len(items)
+    }
+
+
+def get_employee_details(emp_query, main_filepath, approval_filepath=None, attendance_filepath=None, col_config=None):
+    """
+    ค้นหาข้อมูลรายบุคคลสำหรับหน้าจอ Employee Quick Inspector:
+    ดึงข้อมูลประวัติในชีท STAFF TIME ทุกวัน, รายการลาที่ได้รับอนุมัติ, และใบแจ้งเวลา
+    """
+    cfg = col_config or get_default_column_config()
+    emp_id_col = cfg.get('emp_id_col', 'A').upper().strip() or 'A'
+    emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
+    scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
+    leave_type_col = cfg.get('leave_type_col', 'G').upper().strip() or 'G'
+    checkin_col = cfg.get('checkin_col', 'L').upper().strip() or 'L'
+    checkout_col = cfg.get('checkout_col', 'M').upper().strip() or 'M'
+    leave_code_col = cfg.get('leave_code_col', 'Q').upper().strip() or 'Q'
+    try:
+        start_row = int(cfg.get('start_row', 2))
+    except Exception:
+        start_row = 2
+
+    query_str = str(emp_query).strip()
+    query_id = extract_emp_id(query_str)
+    query_name_clean = clean_thai_name(query_str)
+
+    wb = openpyxl.load_workbook(main_filepath, data_only=True)
+    sheet_date_map = map_workbook_sheets(wb)
+    target_dates = set(sheet_date_map.keys())
+
+    matched_id = None
+    matched_name = None
+
+    sorted_dates = sorted(sheet_date_map.keys())
+    for dt in sorted_dates:
+        sheet_name = sheet_date_map[dt]
+        ws = wb[sheet_name]
+        for r in range(start_row, ws.max_row + 1):
+            val_id = ws[f"{emp_id_col}{r}"].value
+            val_name = ws[f"{emp_name_col}{r}"].value
+            eid = extract_emp_id(val_id) if val_id is not None else ""
+            raw_n = str(val_name).strip() if val_name is not None and str(val_name) != 'nan' else ""
+            
+            is_match = False
+            if query_id and eid and query_id == eid:
+                is_match = True
+            elif query_str and raw_n and (query_str.lower() in raw_n.lower() or (query_name_clean and query_name_clean.lower() in raw_n.lower())):
+                is_match = True
+
+            if is_match:
+                matched_id = eid
+                matched_name = raw_n
+                break
+        if matched_id:
+            break
+
+    if not matched_id and not matched_name:
+        wb.close()
+        return None
+
+    daily_records = []
+    scans_total_days = 0
+    leave_total_days = 0
+
+    for dt in sorted_dates:
+        sheet_name = sheet_date_map[dt]
+        ws = wb[sheet_name]
+        row_found = None
+        
+        for r in range(start_row, ws.max_row + 1):
+            val_id = ws[f"{emp_id_col}{r}"].value
+            val_name = ws[f"{emp_name_col}{r}"].value
+            eid = extract_emp_id(val_id) if val_id is not None else ""
+            raw_n = str(val_name).strip() if val_name is not None and str(val_name) != 'nan' else ""
+            if eid == matched_id:
+                row_found = r
+                break
+
+        if row_found:
+            scan_val = ws[f"{scan_col}{row_found}"].value
+            h_in, h_out, scans_list, _, _ = check_fingerprint_scans(scan_val)
+            scans_str = ", ".join(scans_list) if scans_list else "-"
+            if h_in or h_out:
+                scans_total_days += 1
+
+            leave_val = str(ws[f"{leave_type_col}{row_found}"].value or '').strip()
+            if leave_val and leave_val != "None":
+                leave_total_days += 1
+            code_val = str(ws[f"{leave_code_col}{row_found}"].value or '').strip()
+            in_val = ws[f"{checkin_col}{row_found}"].value
+            out_val = ws[f"{checkout_col}{row_found}"].value
+
+            daily_records.append({
+                'date': dt,
+                'sheet': sheet_name,
+                'row': row_found,
+                'scans': scans_str,
+                'has_in': h_in,
+                'has_out': h_out,
+                'leave': leave_val if leave_val != "None" else "-",
+                'code': code_val if code_val != "None" else "-",
+                'in_time': str(in_val) if in_val is not None else "-",
+                'out_time': str(out_val) if out_val is not None else "-"
+            })
+        else:
+            daily_records.append({
+                'date': dt,
+                'sheet': sheet_name,
+                'row': None,
+                'scans': "-",
+                'has_in': False,
+                'has_out': False,
+                'leave': "-",
+                'code': "-",
+                'in_time': "-",
+                'out_time': "-"
+            })
+
+    wb.close()
+
+    appr_leaves = []
+    if approval_filepath and os.path.exists(approval_filepath):
+        df_appr = read_excel_safely(approval_filepath)
+        all_l = parse_approval_records(df_appr, target_dates, lambda msg: None)
+        for l in all_l:
+            if l['emp_id'] == matched_id:
+                appr_leaves.append(l)
+
+    att_records = []
+    if attendance_filepath and os.path.exists(attendance_filepath):
+        df_att = read_excel_safely(attendance_filepath)
+        all_att = parse_attendance_records(df_att, target_dates, lambda msg: None)
+        for a in all_att:
+            if a['emp_id'] == matched_id:
+                att_records.append(a)
+
+    return {
+        'emp_id': matched_id,
+        'emp_name': matched_name,
+        'total_days_in_period': len(sorted_dates),
+        'days_with_scans': scans_total_days,
+        'days_with_leaves': leave_total_days,
+        'approved_leaves_count': len(appr_leaves),
+        'attendance_notifications_count': len(att_records),
+        'daily_records': daily_records,
+        'approved_leaves': appr_leaves,
+        'attendance_records': att_records
+    }
+
+
+# -------------------------------------------------------------
+# ฟังก์ชันประมวลผลและบันทึกไฟล์หลักจริง (Main Execution Engine)
+# เรียกใช้ evaluate_all_records ร่วมกับ Preview เพื่อความสม่ำเสมอ 100%
+# -------------------------------------------------------------
+
+def process_all_files(main_filepath, approval_filepath=None, attendance_filepath=None, 
+                      save_mode='new_file', col_config=None, log_callback=None, progress_callback=None):
+    """
+    ประมวลผลไฟล์ STAFF TIME ด้วยการลาที่ได้รับการอนุมัติ และ/หรือ ใบแจ้งการมาทำงาน
+    ใช้ evaluate_all_records รับประกันว่ารายการที่บันทึกลง Excel ตรงกับรายการที่ Preview 100%
+    """
+    log_callback = log_callback or print
+    progress_callback = progress_callback or (lambda p: None)
+    cfg = col_config or get_default_column_config()
+
+    progress_callback(5)
+    log_callback("=" * 68)
+    log_callback("🍍🥥  เริ่มประมวลผลข้อมูล STAFF TIME (PINEAPPLE & COCONUT)  🥥🍍")
+    log_callback("=" * 68)
+    log_callback(f"📁 ไฟล์ STAFF TIME: {os.path.basename(main_filepath)}")
+    if approval_filepath:
+        log_callback(f"🏖️ การลาที่ได้รับการอนุมัติ: {os.path.basename(approval_filepath)}")
+    if attendance_filepath:
+        log_callback(f"⏰ ใบแจ้งการมาทำงาน: {os.path.basename(attendance_filepath)}")
+
+    wb = openpyxl.load_workbook(main_filepath)
+    sheet_date_map = map_workbook_sheets(wb)
+    if not sheet_date_map:
+        wb.close()
+        raise ValueError("ไม่พบชีทวันที่ในไฟล์ STAFF TIME กรุณาตรวจสอบว่าเป็นไฟล์รายงานเวลาที่ถูกต้อง")
+
+    target_dates = set(sheet_date_map.keys())
+    d_min = min(target_dates); d_max = max(target_dates)
+    log_callback(f"📅 พบชีทรายวันทั้งหมด {len(sheet_date_map)} ชีท (ช่วง {d_min.strftime('%d/%m/%Y')} ถึง {d_max.strftime('%d/%m/%Y')})")
+
+    leave_records = []
+    if approval_filepath and os.path.exists(approval_filepath):
+        df_appr = read_excel_safely(approval_filepath)
+        leave_records = parse_approval_records(df_appr, target_dates, log_callback)
+        log_callback(f"✅ คัดกรองข้อมูลวันลาที่ตรงกับรอบไฟล์ STAFF TIME ได้ {len(leave_records)} รายการ")
+
+    attendance_records = []
+    if attendance_filepath and os.path.exists(attendance_filepath):
+        df_att = read_excel_safely(attendance_filepath)
+        attendance_records = parse_attendance_records(df_att, target_dates, log_callback)
+        log_callback(f"✅ คัดกรองข้อมูลแจ้งเวลาที่ตรงกับรอบไฟล์ STAFF TIME ได้ {len(attendance_records)} รายการ")
+
+    if not leave_records and not attendance_records:
+        wb.close()
+        log_callback("\n⚠️ ไม่พบข้อมูลที่ตรงกับรอบวันที่ของไฟล์ STAFF TIME เลย กรุณาตรวจสอบวันที่ในไฟล์นำเข้า")
+        return None, None, 0, 0
+
+    progress_callback(30)
+    summary, evaluated_items = evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, cfg)
+
+    audit_rows = []
+    log_callback("\n⚙️ กำลังบันทึกข้อมูลลงในแต่ละชีท (พร้อม Double-Check ชื่อ-รหัส)...")
+
+    for item in evaluated_items:
+        ws = wb[item['sheet']] if item['sheet'] in wb.sheetnames else None
+        if item['status_type'] == 'update' and ws:
+            for coord, val in item.get('cell_updates', {}).items():
+                cell = ws[coord]
+                if isinstance(val, time):
+                    set_cell_time(cell, val)
+                else:
+                    cell.value = val
+
+        if item.get('action'):
+            if item['status_type'] == 'update':
+                log_callback(f"  ชีท {item['sheet']} | รหัส {item['emp_id']} ({item['sheet_name'] or item['input_name']}) -> {item['action']}")
+            elif item['status_type'] in ['mismatch', 'conflict', 'skip_scan', 'not_found']:
+                log_callback(f"  ⚠️ [{item['status']}] ชีท {item['sheet']} | รหัส {item['emp_id']} ({item['input_name']}): {item['action']}")
+
+        if item.get('audit_entry'):
+            audit_rows.append(item['audit_entry'])
+
+    progress_callback(80)
+
+    # จัดการฟอร์แมตเวลาให้ตรงกับต้นฉบับ 100% และตรวจสอบวันหยุดบริษัท (Clean-up Sweep)
+    checkin_col = cfg.get('checkin_col', 'L').upper().strip() or 'L'
+    checkout_col = cfg.get('checkout_col', 'M').upper().strip() or 'M'
+    leave_type_col = cfg.get('leave_type_col', 'G').upper().strip() or 'G'
+    leave_code_col = cfg.get('leave_code_col', 'Q').upper().strip() or 'Q'
+    scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
+    start_row = int(cfg.get('start_row', 2))
+    for dt, sheet_name in sheet_date_map.items():
+        ws = wb[sheet_name]
+        is_holiday, holiday_name = is_company_holiday(dt, ws)
+        for r in range(start_row, ws.max_row + 1):
+            for col_letter in [checkin_col, checkout_col]:
+                c = ws[f"{col_letter}{r}"]
+                if isinstance(c.value, str):
+                    m = re.match(r'^(\d{1,2}):(\d{2})(?::\d{2})?$', c.value.strip())
+                    if m:
+                        set_cell_time(c, time(int(m.group(1)), int(m.group(2))))
+                elif isinstance(c.value, (datetime, time)):
+                    c.number_format = 'h:mm'
+            # คืนค่าสูตรคำนวณในช่อง Q หากเคยมีตัวย่อติดไปกับสูตร
+            q_cell = ws[f"{leave_code_col}{r}"]
+            q_val = str(q_cell.value or '').strip()
+            if q_val.startswith('=+P') and '/' in q_val:
+                q_cell.value = re.sub(r'/[ก-๙A-Za-z]+$', '', q_val)
+
+            # ตรวจสอบวันหยุดบริษัทสำหรับทุกแถว:
+            # - คนไม่มีสแกน บังคับ Q เป็น 'น' และช่อง G ต้องว่าง
+            # - คนมีสแกน ปล่อยตามสูตร (ห้ามเป็น 'น') และช่อง G ว่าง
+            if is_holiday and ws[f"B{r}"].value:
+                scan_val = ws[f"{scan_col}{r}"].value
+                h_in, h_out, _, _, _ = check_fingerprint_scans(scan_val)
+                g_cell = ws[f"{leave_type_col}{r}"]
+                g_val = str(g_cell.value or '').strip()
+                if not h_in and not h_out:
+                    if q_val != 'น':
+                        q_cell.value = 'น'
+                    if g_val and g_val != 'None':
+                        g_cell.value = None
+                else:
+                    if q_val == 'น':
+                        q_cell.value = f"=+P{r}-1"
+                    if g_val and g_val != 'None':
+                        g_cell.value = None
+
+    # บันทึกไฟล์ผลลัพธ์
+    dir_name = os.path.dirname(main_filepath)
+    base_name = os.path.basename(main_filepath)
+    name_only, ext_only = os.path.splitext(base_name)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if save_mode == 'overwrite':
+        backup_path = os.path.join(dir_name, f"{name_only}_backup_{timestamp}{ext_only}")
+        shutil.copy2(main_filepath, backup_path)
+        log_callback(f"\n🛡️ สร้างไฟล์สำรองเรียบร้อย: {backup_path}")
+        output_filepath = main_filepath
+    else:
+        output_filepath = os.path.join(dir_name, f"{name_only}_updated_{timestamp}{ext_only}")
+
+    log_callback(f"💾 กำลังบันทึกไฟล์ไปที่: {output_filepath} ...")
+    wb.save(output_filepath)
+    wb.close()
+
+    # สร้างรายงาน Audit Report
+    report_filename = f"Audit_Report_{timestamp}.xlsx"
+    report_filepath = os.path.join(dir_name, report_filename)
+    try:
+        create_audit_report(report_filepath, audit_rows)
+        log_callback(f"📊 สร้างไฟล์รายงานตรวจสอบ (Audit Report) เรียบร้อย: {report_filename}")
+    except Exception as e:
+        log_callback(f"⚠️ ไม่สามารถสร้างไฟล์รายงานตรวจสอบได้: {e}")
+        report_filepath = None
+
+    progress_callback(100)
+    total_up = summary['updates_count']
+    total_sk = summary['skips_count']
+    log_callback("=" * 68)
+    log_callback("🎉  ประมวลผลเสร็จสิ้นสมบูรณ์แบบ 100%!")
+    log_callback(f"  • การลาที่ได้รับการอนุมัติ: อัปเดต {summary['leave_updates']} จุด, ข้าม {summary['leave_skips']} จุด")
+    log_callback(f"  • ใบแจ้งการมาทำงาน: อัปเดต {summary['attend_updates']} จุด, ข้าม {summary['attend_skips']} จุด")
+    log_callback(f"📁 บันทึกไฟล์ที่: {output_filepath}")
+    if report_filepath:
+        log_callback(f"📥 ไฟล์รายงานตรวจสอบ: {report_filepath}")
+    log_callback("=" * 68)
+
+    return output_filepath, report_filepath, total_up, total_sk
+
+
+# -------------------------------------------------------------
+# หน้าต่างโมดอล: คู่มือการใช้งานแบบละเอียด (Manual Dialog)
+# -------------------------------------------------------------
+
+class ManualDialog(ctk.CTkToplevel):
+    def __init__(self, parent, icon_path=None):
+        super().__init__(parent)
+        self.title("📖 คู่มือการใช้งานระบบอัตโนมัติ STAFF TIME (CN.1856)")
+        center_window(self, 980, 750, parent)
+        self.minsize(860, 640)
+        self.font_family = "Tahoma"
+
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.setup_ui()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after_idle(lambda: self.attributes("-topmost", False))
+        self.grab_set()
+        self.focus_force()
+
+    def setup_ui(self):
+        header = ctk.CTkFrame(self, fg_color="#1a73e8", corner_radius=0, height=75)
+        header.pack(fill="x")
+        
+        lbl_t = ctk.CTkLabel(
+            header,
+            text="📖 คู่มือการใช้งานระบบบันทึกเวลา STAFF TIME (CN.1856)",
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_t.pack(pady=(12, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            header,
+            text="คู่มือฉบับสมบูรณ์: ขั้นตอนการทำงาน, กฎเวลา, ระบบกันพลาด 5 ชั้น และการตั้งค่าคอลัมน์",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#fef08a"
+        )
+        lbl_sub.pack(pady=(0, 12))
+
+        tabview = ctk.CTkTabview(self, corner_radius=10)
+        tabview.pack(fill="both", expand=True, padx=16, pady=(10, 8))
+
+        tabs = [
+            ("🚀 ขั้นตอนใช้งาน 3 สเต็ป", self._build_tab_steps),
+            ("⏰ กฎเวลา & รหัสย่อวันลา", self._build_tab_rules),
+            ("🛡️ ระบบกันพลาด 5 ชั้น", self._build_tab_safeguards),
+            ("⚙️ การกำหนดช่องคอลัมน์", self._build_tab_columns),
+            ("❓ คำถามพบบ่อย & แก้ปัญหา", self._build_tab_faq)
+        ]
+
+        for tab_name, builder in tabs:
+            tabview.add(tab_name)
+            tab_frame = tabview.tab(tab_name)
+            builder(tab_frame)
+
+        btn_close = ctk.CTkButton(
+            self,
+            text="✕ ปิดคู่มือ",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            fg_color="#64748b",
+            hover_color="#475569",
+            height=38,
+            width=120,
+            corner_radius=8,
+            command=self.destroy
+        )
+        btn_close.pack(pady=(4, 12))
+
+    def _build_tab_steps(self, parent):
+        scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        steps = [
+            ("1. เลือก 'ไฟล์ STAFF TIME (.xlsx)'",
+             "คลิกปุ่ม '📂 เลือกไฟล์...' ในช่องที่ 1 เพื่อเลือกไฟล์หลักประจำงวดของโครงการ เช่น '1856 3-4-5 DD.111026-311026.xlsx'\n• ระบบจะอ่านและค้นหาชีทรายวันทั้งหมดให้โดยอัตโนมัติ (เช่น ชีท 11.10.26 ถึง 31.10.26)"),
+            ("2. เลือกข้อมูลนำเข้า (วันลา หรือ ใบแจ้งเวลา)",
+             "• ช่อง 2.1 (การลาที่ได้รับการอนุมัติ): เลือกไฟล์ 'อนุมัติ.xlsx' ที่ Export มาจากระบบ CNTIWEB\n• ช่อง 2.2 (ใบแจ้งการมาทำงาน): เลือกไฟล์ 'ใบแจ้งการมาทำงาน.xlsx' ที่ Export มาจากระบบ CNTIWEB\n* สามารถเลือกพร้อมกันทั้ง 2 ไฟล์ หรือเลือกทำทีละไฟล์ก็ได้"),
+            ("3. กด 'ตรวจสอบรายการแก้ไข' หรือ 'เริ่มประมวลผลทันที'",
+             "• ปุ่ม '🔍 ตรวจสอบ & แสดงรายการแก้ไขทั้งหมด': ช่วยให้คุณดูทุกจุดที่จะถูกเขียนลงไฟล์ก่อน พร้อมตัวกรองและค้นหา\n• ปุ่ม '🚀 เริ่มประมวลผลและอัปเดตข้อมูลอัตโนมัติ': ระบบจะทำการอัปเดตและสร้างไฟล์ผลลัพธ์ใหม่ พร้อมรายงาน Audit Report .xlsx ให้ทันที")
+        ]
+
+        for title, desc in steps:
+            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+            card.pack(fill="x", pady=6, padx=4)
+            lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#1a73e8")
+            lbl_title.pack(anchor="w", padx=14, pady=(12, 4))
+            lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
+            lbl_desc.pack(anchor="w", padx=14, pady=(0, 12))
+
+    def _build_tab_rules(self, parent):
+        scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        sections = [
+            ("⏰ กฎเวลาการเข้า-ออกงาน (Attendance Rules)",
+             "• เข้างานช่วงเช้า: หากแจ้งเวลาในช่วง 04:00 - 11:30 ระบบจะบันทึกช่อง L (In) เป็น 07:30\n• เลิกงานช่วงเย็น: ระบบเริ่มต้นพิจารณาที่เวลา 16:30 เป็นต้นไป และปัดเศษนาทีลงเป็นช่วงละ 30 นาที (:00 หรือ :30) ลงช่อง M (Out)\n  - 16:55 ➔ ปัดลงเป็น 16:30\n  - 17:00 ➔ 17:00\n  - 17:10 ➔ ปัดลงเป็น 17:00\n  - 17:33 ➔ ปัดลงเป็น 17:30\n  - 18:05 ➔ ปัดลงเป็น 18:00\n  - 18:31 ➔ ปัดลงเป็น 18:30\n• เติมหมายเหตุ: ระบบจะเติมคำว่า 'มีใบแจ้งฯ' ลงในช่องประเภทลา (ช่อง G) ให้โดยอัตโนมัติ"),
+            ("🏖️ กฎรหัสย่อวันลา (ช่อง Q) และการตัดคำภาษาไทย",
+             "• ตัดชื่อภาษาไทย: ระบบตัดเฉพาะชื่อภาษาไทยเอาไว้ (เช่น 'ลาป่วย - Sick Leave' ➔ เหลือเพียง 'ลาป่วย')\n• รหัสย่อช่อง Q:\n  - ลาพักร้อน ➔ พ\n  - ลาป่วย ➔ ป\n  - ลากิจ, ลาไม่ได้รับค่าจ้าง, หรืออื่นๆ ➔ อ\n• ลาไม่เต็มวัน: ระบบจะระบุจำนวนชั่วโมง เช่น 'ลาป่วย 3 ชม.' และปรับเวลาเข้าหรือออกให้สอดคล้องกัน")
+        ]
+
+        for title, desc in sections:
+            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+            card.pack(fill="x", pady=6, padx=4)
+            lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#d97706")
+            lbl_title.pack(anchor="w", padx=14, pady=(12, 4))
+            lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
+            lbl_desc.pack(anchor="w", padx=14, pady=(0, 12))
+
+    def _build_tab_safeguards(self, parent):
+        scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        safeguards = [
+            ("🛡️ ชั้นที่ 1: ตรวจสอบสแกนนิ้วดิบ (Biometric Scan Check)",
+             "ระบบตรวจช่องสแกนนิ้วดิบ (ช่อง E) หากพบว่าพนักงานมีการสแกนนิ้วครบทั้งเข้างาน (ตั้งแต่ 04:00 น.) และออกงาน (เย็น) แล้ว ระบบจะ 'ข้าม' ข้อมูลวันลาหรือใบแจ้งเวลาในวันนั้นทันที เพื่อป้องกันกรณีพนักงานจำวันผิด กรอกลาผิดวัน หรือแจ้งลืมสแกนซ้ำซ้อน"),
+            ("🛡️ ชั้นที่ 2: ดับเบิลเช็คชื่อพนักงาน (Double-Check Name Similarity)",
+             "ระบบเปรียบเทียบชื่อพนักงานในไฟล์นำเข้ากับชื่อที่ปรากฏในชีท STAFF TIME หากรหัสพนักงานตรงแต่ชื่อไม่ตรงกัน (เช่น คีย์รหัสผิดในไฟล์หลัก) ระบบจะข้ามเพื่อความปลอดภัย พร้อมแจ้งเตือนใน Log และ Audit Report ทันที"),
+            ("🛡️ ชั้นที่ 3: ตรวจจับข้อมูลขัดแย้ง (Conflict Detection)",
+             "หากพนักงานคนเดียวกันในวันเดียวกัน มีทั้ง 'วันลาเต็มวัน' และ 'ใบแจ้งการมาทำงาน' ชนกัน ระบบจะยึด 'วันลาที่ได้รับการอนุมัติ' เป็นหลัก และข้ามใบแจ้งเวลา พร้อมแจ้งเตือน"),
+            ("🛡️ ชั้นที่ 4: ตรวจจับสแกนเดี่ยวซ้ำซ้อน (Redundant Single Scan)",
+             "หากพนักงานมีสแกนเช้าอยู่แล้ว แต่ไปยื่นใบแจ้งเวลาเข้างาน ระบบจะข้ามให้ เพราะมีเวลาสแกนจริงอยู่แล้ว เช่นเดียวกันหากมีสแกนเย็น >= 16:30 อยู่แล้ว จะข้ามใบแจ้งออกงาน"),
+            ("🛡️ ชั้นที่ 5: รายงานผลการตรวจสอบ Audit & Discrepancy Report (.xlsx)",
+             "ทุกครั้งที่ประมวลผลเสร็จสิ้น ระบบจะสร้างไฟล์ 'Audit_Report_วันที่.xlsx' บันทึกรายการทุกจุด ทั้งจุดที่อัปเดตสำเร็จ และจุดที่ติดเงื่อนไขพร้อมระบุเหตุผลอย่างละเอียด 100%")
+        ]
+
+        for title, desc in safeguards:
+            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+            card.pack(fill="x", pady=6, padx=4)
+            lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#15803d")
+            lbl_title.pack(anchor="w", padx=14, pady=(12, 4))
+            lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
+            lbl_desc.pack(anchor="w", padx=14, pady=(0, 12))
+
+    def _build_tab_columns(self, parent):
+        scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        card.pack(fill="x", pady=6, padx=4)
+
+        desc = (
+            "โปรแกรมรองรับการปรับแต่งช่องคอลัมน์เป้าหมายในหมวดที่ 3 ของหน้าต่างหลัก เผื่อกรณีโครงการอื่นใช้เทมเพลตต่างกัน:\n\n"
+            "• ช่อง A (รหัสพนักงาน): รหัสของพนักงานประจำแถวนั้น\n"
+            "• ช่อง B (ชื่อพนักงาน): ใช้ทำ Double-Check ตรวจสอบชื่อตัวกับไฟล์นำเข้า\n"
+            "• ช่อง E (สแกนดิบ): เวลาสแกนนิ้วดิบ (Time) เช่น '07:28 17:02'\n"
+            "• ช่อง G (ประเภทลา): ลงชื่อวันลาภาษาไทย หรือเติม 'มีใบแจ้งฯ'\n"
+            "• ช่อง L (เวลาเข้า): เวลาเข้างาน Check-in (ลง 07:30)\n"
+            "• ช่อง M (เวลาออก): เวลาเลิกงาน Check-out (ลงเวลาปัดเศษลง 30 นาที)\n"
+            "• ช่อง Q (รหัสย่อ): ลงรหัสตัวย่อ พ / ป / อ\n"
+            "• เริ่มแถวที่ 2: แถวแรกที่เริ่มมีข้อมูลพนักงาน (ข้ามหัวตารางแถวที่ 1)\n\n"
+            "💡 หากต้องการกลับไปใช้ค่ามาตรฐาน สามารถกดปุ่ม '🔄 คืนค่าเริ่มต้น' ได้ตลอดเวลา"
+        )
+        lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
+        lbl_desc.pack(anchor="w", padx=16, pady=16)
+
+    def _build_tab_faq(self, parent):
+        scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        faqs = [
+            ("Q: ทำไมข้อมูลของพนักงานบางคนถึงไม่ถูกนำไปกรอกลงในชีท?",
+             "ตอบ: มีสาเหตุที่เป็นไปได้ดังนี้:\n1. พนักงานมีสแกนนิ้วครบทั้งเข้าและออกแล้ว (ระบบกันพลาดป้องกันกรอกลาผิดวัน)\n2. มีข้อมูลเดิมหรือเวลาเดิมตรงกับเป้าหมายอยู่แล้วในช่องนั้น (ระบบข้ามเพื่อไม่ให้เขียนทับซ้ำซ้อน)\n3. ชื่อพนักงานในชีท STAFF TIME ไม่ตรงกับไฟล์นำเข้า (ระบบข้ามเพื่อป้องกันคีย์รหัสผิด)\n4. วันที่ในไฟล์นำเข้าไม่ได้อยู่ในช่วงงวดของไฟล์ STAFF TIME\n* ท่านสามารถเปิดดู 'Audit Report' หรือกดปุ่ม '🔍 ตรวจสอบ & แสดงรายการแก้ไข' เพื่อดูเหตุผลรายคนได้ทันที"),
+            ("Q: ไฟล์ผลลัพธ์ถูกบันทึกไว้ที่ไหน?",
+             "ตอบ: ถูกบันทึกไว้ในโฟลเดอร์เดียวกับ 'ไฟล์ STAFF TIME' โดยมีชื่อลงท้ายด้วย _updated_วันที่เวลา ท่านสามารถกดปุ่ม '📂 เปิดโฟลเดอร์ไฟล์' บนหน้าจอหลักเพื่อเปิดดูได้ทันที"),
+            ("Q: หากต้องการดูข้อมูลของพนักงานรายคนแบบเจาะลึกทำอย่างไร?",
+             "ตอบ: กดปุ่ม '👤 ตรวจสอบรายคน' บนแถบด้านบนของหน้าต่างหลัก แล้วพิมพ์รหัสหรือชื่อพนักงานเพื่อค้นหาได้ทันที")
+        ]
+
+        for q, a in faqs:
+            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+            card.pack(fill="x", pady=6, padx=4)
+            lbl_q = ctk.CTkLabel(card, text=q, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), text_color="#1e293b")
+            lbl_q.pack(anchor="w", padx=14, pady=(12, 4))
+            lbl_a = ctk.CTkLabel(card, text=a, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#475569", justify="left")
+            lbl_a.pack(anchor="w", padx=14, pady=(0, 12))
+
+
+# -------------------------------------------------------------
+# หน้าต่างโมดอล: แสดงรายการที่จะแก้ไขทั้งหมด (Preview All Changes)
+# รองรับ Pagination ทรงประสิทธิภาพ ป้องกันกระตุกกรณีไฟล์ใหญ่
+# -------------------------------------------------------------
+
+class PreviewDialog(ctk.CTkToplevel):
+    def __init__(self, parent, summary, preview_items, on_proceed_callback=None, icon_path=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.summary = summary
+        self.all_items = preview_items
+        self.filtered_items = preview_items
+        self.on_proceed_callback = on_proceed_callback
+        self.current_filter = "all"
+        self.font_family = "Tahoma"
+
+        # ตัวแปรแบ่งหน้าเพื่อความลื่นไหล (โหลดทันที ไม่กระตุก)
+        self.display_limit = 25
+        self.page_size = 25
+
+        self.title("🔍 ตรวจสอบและแสดงรายการแก้ไขทั้งหมดในไฟล์ STAFF TIME")
+        center_window(self, 1120, 780, parent)
+        self.minsize(980, 680)
+
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.setup_ui()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after_idle(lambda: self.attributes("-topmost", False))
+        self.grab_set()
+        self.focus_force()
+
+    def setup_ui(self):
+        header = ctk.CTkFrame(self, fg_color="#1a73e8", corner_radius=0, height=80)
+        header.pack(fill="x")
+
+        lbl_t = ctk.CTkLabel(
+            header,
+            text="🔍 รายการที่จะแก้ไขทั้งหมดในไฟล์ STAFF TIME (Pre-Check Preview)",
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_t.pack(pady=(12, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            header,
+            text=f"งวดวันที่: {self.summary.get('date_range', '-')} | ตรวจสอบทุกจุดก่อนบันทึกลงไฟล์จริง ปลอดภัย 100%",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#fef08a"
+        )
+        lbl_sub.pack(pady=(0, 12))
+
+        # KPI Summary Bar
+        kpi_frame = ctk.CTkFrame(self, fg_color="#f8fafc", corner_radius=10, border_width=1, border_color="#e2e8f0")
+        kpi_frame.pack(fill="x", padx=16, pady=(10, 6))
+        for col_i in range(5):
+            kpi_frame.grid_columnconfigure(col_i, weight=1)
+
+        kpis = [
+            ("รายการทั้งหมด", str(self.summary.get('total_items', 0)), "#0f172a", "#f1f5f9"),
+            ("✅ จะอัปเดต", str(self.summary.get('updates_count', 0)), "#15803d", "#dcfce7"),
+            ("⚠️ ข้าม (ติดเงื่อนไข)", str(self.summary.get('skips_count', 0)), "#b45309", "#fef3c7"),
+            ("⚡ ข้อมูลขัดแย้ง", str(self.summary.get('conflict_count', 0)), "#b91c1c", "#fee2e2"),
+            ("📅 จำนวนชีทรายวัน", f"{self.summary.get('sheets_count', 0)} ชีท", "#0369a1", "#e0f2fe")
+        ]
+
+        for idx, (label, val, fg_txt, bg_pill) in enumerate(kpis):
+            card = ctk.CTkFrame(kpi_frame, fg_color=bg_pill, corner_radius=8, border_width=1, border_color="#cbd5e1")
+            card.grid(row=0, column=idx, padx=6, pady=8, sticky="ew")
+            lbl_l = ctk.CTkLabel(card, text=label, font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=fg_txt)
+            lbl_l.pack(pady=(6, 1))
+            lbl_v = ctk.CTkLabel(card, text=val, font=ctk.CTkFont(family=self.font_family, size=18, weight="bold"), text_color=fg_txt)
+            lbl_v.pack(pady=(0, 6))
+
+        # Filter & Search Controls
+        filter_bar = ctk.CTkFrame(self, fg_color="transparent")
+        filter_bar.pack(fill="x", padx=16, pady=(4, 8))
+        filter_bar.grid_columnconfigure(0, weight=1)
+
+        self.search_entry = ctk.CTkEntry(
+            filter_bar,
+            placeholder_text="🔍 ค้นหารหัสพนักงาน, ชื่อพนักงาน, หรือชีทวันที่...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=38,
+            corner_radius=8
+        )
+        self.search_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.search_entry.bind("<KeyRelease>", lambda e: self.apply_filters())
+
+        self.btn_f_all = ctk.CTkButton(
+            filter_bar, text=f"ทั้งหมด ({len(self.all_items)})", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#1a73e8", width=95, height=38, corner_radius=8,
+            command=lambda: self.set_filter("all")
+        )
+        self.btn_f_all.grid(row=0, column=1, padx=3)
+
+        self.btn_f_upd = ctk.CTkButton(
+            filter_bar, text=f"✅ จะอัปเดต ({self.summary.get('updates_count', 0)})", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#e2e8f0", text_color="#15803d", hover_color="#bbf7d0", width=120, height=38, corner_radius=8,
+            command=lambda: self.set_filter("update")
+        )
+        self.btn_f_upd.grid(row=0, column=2, padx=3)
+
+        self.btn_f_skip = ctk.CTkButton(
+            filter_bar, text=f"⚠️ ข้าม ({self.summary.get('skips_count', 0)})", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#e2e8f0", text_color="#b45309", hover_color="#fde68a", width=105, height=38, corner_radius=8,
+            command=lambda: self.set_filter("skips")
+        )
+        self.btn_f_skip.grid(row=0, column=3, padx=3)
+
+        self.btn_f_conf = ctk.CTkButton(
+            filter_bar, text=f"⚡ ข้อมูลขัดแย้ง ({self.summary.get('conflict_count', 0)})", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#e2e8f0", text_color="#b91c1c", hover_color="#fecaca", width=130, height=38, corner_radius=8,
+            command=lambda: self.set_filter("conflict")
+        )
+        self.btn_f_conf.grid(row=0, column=4, padx=(3, 0))
+
+        self.lbl_counter = ctk.CTkLabel(
+            self,
+            text=f"แสดง {min(self.display_limit, len(self.all_items))} จากทั้งหมด {len(self.all_items)} รายการ",
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color="#64748b"
+        )
+        self.lbl_counter.pack(anchor="w", padx=20, pady=(0, 4))
+
+        # Scrollable Container
+        self.scroll_items = ctk.CTkScrollableFrame(self, fg_color="#f1f5f9", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        self.scroll_items.pack(fill="both", expand=True, padx=16, pady=(0, 10))
+        self.scroll_items.grid_columnconfigure(0, weight=1)
+
+        # Bottom Action Bar
+        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        bottom_frame.pack(fill="x", padx=16, pady=(0, 12))
+        bottom_frame.grid_columnconfigure(0, weight=1)
+
+        btn_cancel = ctk.CTkButton(
+            bottom_frame,
+            text="✕ ปิดหน้าต่างตรวจสอบ",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            fg_color="#94a3b8",
+            hover_color="#64748b",
+            height=46,
+            width=180,
+            corner_radius=8,
+            command=self.destroy
+        )
+        btn_cancel.grid(row=0, column=1, padx=(0, 10))
+
+        if self.on_proceed_callback:
+            btn_proceed = ctk.CTkButton(
+                bottom_frame,
+                text="🚀   ยืนยันและเริ่มอัปเดตไฟล์ทันที",
+                font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
+                fg_color="#f59e0b",
+                hover_color="#d97706",
+                height=46,
+                corner_radius=8,
+                command=self._proceed
+            )
+            btn_proceed.grid(row=0, column=2)
+
+        self.render_items()
+
+    def set_filter(self, filter_name):
+        self.current_filter = filter_name
+        self.display_limit = self.page_size
+        btns = [
+            ("all", self.btn_f_all, "#1a73e8", "#ffffff"),
+            ("update", self.btn_f_upd, "#15803d", "#ffffff"),
+            ("skips", self.btn_f_skip, "#b45309", "#ffffff"),
+            ("conflict", self.btn_f_conf, "#b91c1c", "#ffffff")
+        ]
+        for f_key, btn, active_bg, active_fg in btns:
+            if f_key == filter_name:
+                btn.configure(fg_color=active_bg, text_color=active_fg)
+            else:
+                btn.configure(fg_color="#e2e8f0", text_color="#334155")
+        self.apply_filters()
+
+    def apply_filters(self):
+        query = self.search_entry.get().strip().lower()
+        items = self.all_items
+
+        if self.current_filter == "update":
+            items = [x for x in items if x['status_type'] == 'update']
+        elif self.current_filter == "skips":
+            items = [x for x in items if x['status_type'] != 'update']
+        elif self.current_filter == "conflict":
+            items = [x for x in items if x['status_type'] == 'conflict']
+
+        if query:
+            filtered = []
+            for item in items:
+                text_corpus = f"{item['sheet']} {item['emp_id']} {item['input_name']} {item['sheet_name']} {item['action']} {item['status']}".lower()
+                if query in text_corpus:
+                    filtered.append(item)
+            items = filtered
+
+        self.filtered_items = items
+        self.update_counter()
+        self.render_items()
+
+    def update_counter(self):
+        showing = min(self.display_limit, len(self.filtered_items))
+        self.lbl_counter.configure(text=f"แสดง {showing} จากที่กรองพบ {len(self.filtered_items)} รายการ (ทั้งหมด {len(self.all_items)})")
+
+    def _load_more(self):
+        self.display_limit += self.page_size
+        self.update_counter()
+        self.render_items()
+
+    def _load_all(self):
+        self.display_limit = len(self.filtered_items)
+        self.update_counter()
+        self.render_items()
+
+    def render_items(self):
+        for widget in self.scroll_items.winfo_children():
+            widget.destroy()
+
+        if not self.filtered_items:
+            empty_lbl = ctk.CTkLabel(
+                self.scroll_items,
+                text="ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา",
+                font=ctk.CTkFont(family=self.font_family, size=15),
+                text_color="#94a3b8"
+            )
+            empty_lbl.pack(pady=40)
+            return
+
+        items_to_render = self.filtered_items[:self.display_limit]
+
+        for idx, item in enumerate(items_to_render, 1):
+            st = item['status_type']
+            if st == 'update':
+                card_bg = "#ffffff"
+                border_col = "#86efac"
+                badge_bg = "#dcfce7"
+                badge_fg = "#15803d"
+            elif st == 'conflict' or st == 'mismatch':
+                card_bg = "#ffffff"
+                border_col = "#fca5a5"
+                badge_bg = "#fee2e2"
+                badge_fg = "#b91c1c"
+            else:
+                card_bg = "#ffffff"
+                border_col = "#cbd5e1"
+                badge_bg = "#fef3c7"
+                badge_fg = "#b45309"
+
+            card = ctk.CTkFrame(self.scroll_items, fg_color=card_bg, corner_radius=10, border_width=1.5, border_color=border_col)
+            card.pack(fill="x", pady=4, padx=2)
+            card.grid_columnconfigure(1, weight=1)
+
+            top_line = ctk.CTkFrame(card, fg_color="transparent")
+            top_line.pack(fill="x", padx=14, pady=(10, 4))
+            top_line.grid_columnconfigure(0, weight=1)
+
+            emp_disp = f"รหัส {item['emp_id']} : {item['input_name']}"
+            if item['sheet_name'] and item['sheet_name'] != '-':
+                emp_disp += f" (ในชีท: {item['sheet_name']})"
+
+            lbl_emp = ctk.CTkLabel(
+                top_line,
+                text=f"[{idx:03d}] 📅 ชีท {item['sheet']}   |   👤 {emp_disp}   |   ประเภท: {item['type']}",
+                font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+                text_color="#1e293b"
+            )
+            lbl_emp.grid(row=0, column=0, sticky="w")
+
+            badge = ctk.CTkLabel(
+                top_line,
+                text=f" {item['status']} ",
+                font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+                text_color=badge_fg,
+                fg_color=badge_bg,
+                corner_radius=6
+            )
+            badge.grid(row=0, column=1, sticky="e")
+
+            mid_line = ctk.CTkFrame(card, fg_color="transparent")
+            mid_line.pack(fill="x", padx=14, pady=(0, 4))
+            
+            action_text = f"⚡ สิ่งที่จะแก้ไข: {item['action']}"
+            lbl_action = ctk.CTkLabel(
+                mid_line,
+                text=action_text,
+                font=ctk.CTkFont(family=self.font_family, size=13, weight="bold" if st == 'update' else "normal"),
+                text_color="#15803d" if st == 'update' else "#334155"
+            )
+            lbl_action.pack(anchor="w")
+
+            bot_line = ctk.CTkFrame(card, fg_color="transparent")
+            bot_line.pack(fill="x", padx=14, pady=(0, 10))
+            
+            sub_info = f"🎯 ช่องเป้าหมาย: [{item.get('target_cells', '-')}]   |   ⏱️ สแกนจริงในชีท (ช่อง E): {item.get('scans', '-')}"
+            if item.get('detail'):
+                sub_info += f"   |   💡 รายละเอียด: {item['detail']}"
+
+            lbl_sub = ctk.CTkLabel(
+                bot_line,
+                text=sub_info,
+                font=ctk.CTkFont(family=self.font_family, size=12),
+                text_color="#64748b"
+            )
+            lbl_sub.pack(anchor="w")
+
+        # ปุ่มโหลดเพิ่มเติมหากรายการเกิน limit
+        if len(self.filtered_items) > self.display_limit:
+            more_frame = ctk.CTkFrame(self.scroll_items, fg_color="transparent")
+            more_frame.pack(fill="x", pady=12)
+            more_frame.grid_columnconfigure(0, weight=1)
+            more_frame.grid_columnconfigure(1, weight=1)
+
+            btn_more = ctk.CTkButton(
+                more_frame,
+                text=f"➕ แสดงเพิ่มอีก {self.page_size} รายการ (กำลังแสดง {self.display_limit} จาก {len(self.filtered_items)})",
+                font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+                fg_color="#e0f2fe",
+                text_color="#0369a1",
+                hover_color="#bae6fd",
+                height=40,
+                corner_radius=8,
+                command=self._load_more
+            )
+            btn_more.grid(row=0, column=0, padx=6, sticky="ew")
+
+            btn_all = ctk.CTkButton(
+                more_frame,
+                text=f"⚡ แสดงทั้งหมด ({len(self.filtered_items)} รายการ)",
+                font=ctk.CTkFont(family=self.font_family, size=13),
+                fg_color="#f1f5f9",
+                text_color="#475569",
+                hover_color="#e2e8f0",
+                height=40,
+                corner_radius=8,
+                command=self._load_all
+            )
+            btn_all.grid(row=0, column=1, padx=6, sticky="ew")
+
+    def _proceed(self):
+        self.destroy()
+        if self.on_proceed_callback:
+            self.on_proceed_callback()
+
+
+# -------------------------------------------------------------
+# หน้าต่างโมดอล: ตรวจสอบรายคน (Employee Quick Inspector Dialog)
+# -------------------------------------------------------------
+
+class InspectorDialog(ctk.CTkToplevel):
+    def __init__(self, parent, main_file, appr_file, att_file, col_config=None, icon_path=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.main_file = main_file
+        self.appr_file = appr_file
+        self.att_file = att_file
+        self.col_config = col_config
+        self.font_family = "Tahoma"
+
+        self.title("👤 ตรวจสอบรายคน (Employee Quick Inspector)")
+        center_window(self, 1000, 740, parent)
+        self.minsize(880, 620)
+
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.setup_ui()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after_idle(lambda: self.attributes("-topmost", False))
+        self.grab_set()
+        self.focus_force()
+
+    def setup_ui(self):
+        header = ctk.CTkFrame(self, fg_color="#1a73e8", corner_radius=0, height=75)
+        header.pack(fill="x")
+
+        lbl_t = ctk.CTkLabel(
+            header,
+            text="👤 ตรวจสอบรายคน (Employee Quick Inspector)",
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_t.pack(pady=(12, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            header,
+            text="ตรวจสอบประวัติรายวันในไฟล์ STAFF TIME, วันลาที่ได้รับอนุมัติ และใบแจ้งเวลาทำงานของพนักงานรายบุคคล",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#fef08a"
+        )
+        lbl_sub.pack(pady=(0, 12))
+
+        search_card = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        search_card.pack(fill="x", padx=16, pady=10)
+        search_card.grid_columnconfigure(0, weight=1)
+
+        self.txt_query = ctk.CTkEntry(
+            search_card,
+            placeholder_text="พิมพ์รหัสพนักงาน หรือ ชื่อพนักงาน (เช่น 5539 หรือ นริศร)...",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            height=42,
+            corner_radius=8
+        )
+        self.txt_query.grid(row=0, column=0, padx=(14, 10), pady=12, sticky="ew")
+        self.txt_query.bind("<Return>", lambda e: self.do_search())
+
+        btn_search = ctk.CTkButton(
+            search_card,
+            text="🔍 ค้นหา",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            fg_color="#1a73e8",
+            hover_color="#1557b0",
+            width=110,
+            height=42,
+            corner_radius=8,
+            command=self.do_search
+        )
+        btn_search.grid(row=0, column=1, padx=(0, 8), pady=12)
+
+        btn_clear = ctk.CTkButton(
+            search_card,
+            text="✕ ล้าง",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            fg_color="#e2e8f0",
+            hover_color="#cbd5e1",
+            text_color="#334155",
+            width=80,
+            height=42,
+            corner_radius=8,
+            command=self.clear_search
+        )
+        btn_clear.grid(row=0, column=2, padx=(0, 14), pady=12)
+
+        self.results_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.results_container.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        self.show_initial_state()
+
+    def show_initial_state(self):
+        for w in self.results_container.winfo_children():
+            w.destroy()
+
+        hint_card = ctk.CTkFrame(self.results_container, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        hint_card.pack(fill="both", expand=True)
+
+        lbl_hint = ctk.CTkLabel(
+            hint_card,
+            text="👆 กรุณาพิมพ์รหัสพนักงาน หรือ ชื่อพนักงานในช่องค้นหาด้านบน แล้วกดปุ่ม 'ค้นหา'\nระบบจะรวบรวมประวัติการสแกนนิ้ว, วันลาที่อนุมัติ และใบแจ้งเวลาทั้งหมดของพนักงานท่านนั้นมาแสดงทันที",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            text_color="#64748b",
+            justify="center"
+        )
+        lbl_hint.pack(expand=True, pady=40)
+
+    def clear_search(self):
+        self.txt_query.delete(0, 'end')
+        self.show_initial_state()
+
+    def do_search(self):
+        query = self.txt_query.get().strip()
+        if not query:
+            return
+
+        if not self.main_file or not os.path.exists(self.main_file):
+            messagebox.showerror("แจ้งเตือน", "กรุณาเลือกไฟล์ STAFF TIME (.xlsx) ให้ถูกต้องก่อนค้นหา")
+            return
+
+        for w in self.results_container.winfo_children():
+            w.destroy()
+
+        lbl_loading = ctk.CTkLabel(
+            self.results_container,
+            text=f"⏳ กำลังค้นหาข้อมูลของ '{query}' ในไฟล์ STAFF TIME...",
+            font=ctk.CTkFont(family=self.font_family, size=15),
+            text_color="#1a73e8"
+        )
+        lbl_loading.pack(pady=40)
+        self.update_idletasks()
+
+        info = get_employee_details(query, self.main_file, self.appr_file, self.att_file, self.col_config)
+
+        for w in self.results_container.winfo_children():
+            w.destroy()
+
+        if not info:
+            not_found_card = ctk.CTkFrame(self.results_container, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#fca5a5")
+            not_found_card.pack(fill="both", expand=True)
+            lbl_nf = ctk.CTkLabel(
+                not_found_card,
+                text=f"❌ ไม่พบข้อมูลพนักงานที่ตรงกับคำค้นหา: '{query}'\nกรุณาตรวจสอบรหัสหรือชื่อพนักงานอีกครั้ง",
+                font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
+                text_color="#b91c1c"
+            )
+            lbl_nf.pack(expand=True, pady=40)
+            return
+
+        profile_card = ctk.CTkFrame(self.results_container, fg_color="#ffffff", corner_radius=10, border_width=1.5, border_color="#1a73e8")
+        profile_card.pack(fill="x", pady=(0, 8))
+        profile_card.grid_columnconfigure(0, weight=1)
+
+        top_p = ctk.CTkFrame(profile_card, fg_color="#eff6ff", corner_radius=8)
+        top_p.pack(fill="x", padx=10, pady=10)
+        top_p.grid_columnconfigure(0, weight=1)
+
+        lbl_name = ctk.CTkLabel(
+            top_p,
+            text=f"👤 รหัส: {info['emp_id']}   |   ชื่อ-นามสกุล: {info['emp_name']}",
+            font=ctk.CTkFont(family=self.font_family, size=17, weight="bold"),
+            text_color="#1e40af"
+        )
+        lbl_name.grid(row=0, column=0, sticky="w", padx=14, pady=8)
+
+        stats_line = (
+            f"📅 วันในงวด: {info['total_days_in_period']} วัน   |   "
+            f"⏱️ วันที่มีสแกนนิ้ว: {info['days_with_scans']} วัน   |   "
+            f"🏖️ วันลาที่บันทึกแล้ว: {info['days_with_leaves']} วัน   |   "
+            f"📄 วันลาที่อนุมัติ: {info['approved_leaves_count']} รายการ   |   "
+            f"⏰ ใบแจ้งเวลา: {info['attendance_notifications_count']} ฉบับ"
+        )
+        lbl_stats = ctk.CTkLabel(
+            profile_card,
+            text=stats_line,
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#475569"
+        )
+        lbl_stats.pack(anchor="w", padx=14, pady=(0, 10))
+
+        tabview = ctk.CTkTabview(self.results_container, corner_radius=10)
+        tabview.pack(fill="both", expand=True)
+
+        tabview.add("📅 ตารางรายวันใน STAFF TIME")
+        tabview.add(f"🏖️ การลาที่ได้รับอนุมัติ ({info['approved_leaves_count']})")
+        tabview.add(f"⏰ ใบแจ้งการมาทำงาน ({info['attendance_notifications_count']})")
+
+        # 1. Daily Tab
+        t1 = tabview.tab("📅 ตารางรายวันใน STAFF TIME")
+        s1 = ctk.CTkScrollableFrame(t1, fg_color="transparent")
+        s1.pack(fill="both", expand=True)
+
+        for d in info['daily_records']:
+            row_card = ctk.CTkFrame(s1, fg_color="#ffffff", corner_radius=8, border_width=1, border_color="#cbd5e1")
+            row_card.pack(fill="x", pady=3, padx=2)
+            row_card.grid_columnconfigure(0, weight=1)
+
+            d_str = d['date'].strftime('%d/%m/%Y')
+            status_text = []
+            if d['has_in'] and d['has_out']:
+                status_text.append("✅ สแกนครบ")
+            elif d['has_in']:
+                status_text.append("⚠️ สแกนเฉพาะเข้า")
+            elif d['has_out']:
+                status_text.append("⚠️ สแกนเฉพาะออก")
+            else:
+                status_text.append("❌ ไม่มีสแกน")
+
+            if d['leave'] != '-':
+                status_text.append(f"🏖️ {d['leave']}")
+
+            top_t = f"📅 {d_str} (ชีท {d['sheet']})   |   {' '.join(status_text)}"
+            lbl_top = ctk.CTkLabel(row_card, text=top_t, font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#0f172a")
+            lbl_top.pack(anchor="w", padx=12, pady=(6, 2))
+
+            det_t = f"สแกนจริง (E): {d['scans']}   |   เข้า (L): {d['in_time']}   |   ออก (M): {d['out_time']}   |   รหัสย่อ (Q): {d['code']}"
+            lbl_det = ctk.CTkLabel(row_card, text=det_t, font=ctk.CTkFont(family=self.font_family, size=12), text_color="#64748b")
+            lbl_det.pack(anchor="w", padx=12, pady=(0, 6))
+
+        # 2. Approved Leaves Tab
+        t2 = tabview.tab(f"🏖️ การลาที่ได้รับอนุมัติ ({info['approved_leaves_count']})")
+        s2 = ctk.CTkScrollableFrame(t2, fg_color="transparent")
+        s2.pack(fill="both", expand=True)
+
+        if not info['approved_leaves']:
+            lbl_no = ctk.CTkLabel(s2, text="ไม่พบข้อมูลวันลาในไฟล์การลาที่ได้รับการอนุมัติ", font=ctk.CTkFont(family=self.font_family, size=13), text_color="#94a3b8")
+            lbl_no.pack(pady=20)
+        else:
+            for idx, l in enumerate(info['approved_leaves'], 1):
+                c = ctk.CTkFrame(s2, fg_color="#ffffff", corner_radius=8, border_width=1, border_color="#cbd5e1")
+                c.pack(fill="x", pady=3, padx=2)
+                d_str = l['date'].strftime('%d/%m/%Y')
+                lbl_l1 = ctk.CTkLabel(c, text=f"[{idx}] วันที่: {d_str}   |   ประเภท: {l['leave_type_raw']}", font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#b45309")
+                lbl_l1.pack(anchor="w", padx=12, pady=(6, 2))
+                hrs_display = f"{l['hours']:g} ชม." if l.get('hours') is not None else ""
+                lbl_l2 = ctk.CTkLabel(c, text=f"จำนวน: {'ลาไม่เต็มวัน ' + hrs_display if l['is_partial'] else 'ลาเต็มวัน'}   |   ชื่อที่ระบุ: {l['emp_raw']}", font=ctk.CTkFont(family=self.font_family, size=12), text_color="#64748b")
+                lbl_l2.pack(anchor="w", padx=12, pady=(0, 6))
+
+        # 3. Attendance Notifications Tab
+        t3 = tabview.tab(f"⏰ ใบแจ้งการมาทำงาน ({info['attendance_notifications_count']})")
+        s3 = ctk.CTkScrollableFrame(t3, fg_color="transparent")
+        s3.pack(fill="both", expand=True)
+
+        if not info['attendance_records']:
+            lbl_no = ctk.CTkLabel(s3, text="ไม่พบข้อมูลในใบแจ้งการมาทำงาน", font=ctk.CTkFont(family=self.font_family, size=13), text_color="#94a3b8")
+            lbl_no.pack(pady=20)
+        else:
+            for idx, a in enumerate(info['attendance_records'], 1):
+                c = ctk.CTkFrame(s3, fg_color="#ffffff", corner_radius=8, border_width=1, border_color="#cbd5e1")
+                c.pack(fill="x", pady=3, padx=2)
+                d_str = a['date'].strftime('%d/%m/%Y')
+                t_lbl = f"{a['target_time'].hour}:{a['target_time'].minute:02d}"
+                side_lbl = "ช่วงเช้า (Check-in 07:30)" if a['target_col'] == 'L' else "ช่วงเย็น (Check-out ปัดเศษ 30 นาที)"
+                lbl_a1 = ctk.CTkLabel(c, text=f"[{idx}] วันที่: {d_str}   |   {side_lbl}", font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#15803d")
+                lbl_a1.pack(anchor="w", padx=12, pady=(6, 2))
+                lbl_a2 = ctk.CTkLabel(c, text=f"เวลาที่แจ้งมา: {a['orig_time']}   ➔   ปรับเป็น: {t_lbl} ลงช่อง {a['target_col']}", font=ctk.CTkFont(family=self.font_family, size=12), text_color="#64748b")
+                lbl_a2.pack(anchor="w", padx=12, pady=(0, 6))
+
+
+# -------------------------------------------------------------
+# หน้าต่างโมดอล: สถิติภาพรวมโครงการ (STAFF TIME Analytics Dialog)
+# -------------------------------------------------------------
+
+class AnalyticsDialog(ctk.CTkToplevel):
+    def __init__(self, parent, main_file, appr_file, att_file, col_config=None, icon_path=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.main_file = main_file
+        self.appr_file = appr_file
+        self.att_file = att_file
+        self.col_config = col_config
+        self.font_family = "Tahoma"
+
+        self.title("📈 สถิติภาพรวมโครงการ (STAFF TIME Analytics)")
+        center_window(self, 960, 720, parent)
+        self.minsize(860, 620)
+
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.setup_ui()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after_idle(lambda: self.attributes("-topmost", False))
+        self.grab_set()
+        self.focus_force()
+
+    def setup_ui(self):
+        header = ctk.CTkFrame(self, fg_color="#1a73e8", corner_radius=0, height=75)
+        header.pack(fill="x")
+
+        lbl_t = ctk.CTkLabel(
+            header,
+            text="📈 สถิติภาพรวมโครงการ (STAFF TIME Analytics)",
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_t.pack(pady=(12, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            header,
+            text="วิเคราะห์และสรุปภาพรวมการลงเวลาทำงาน วันลา และใบแจ้งเวลาประจำงวด",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#fef08a"
+        )
+        lbl_sub.pack(pady=(0, 12))
+
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=16, pady=10)
+
+        lbl_load = ctk.CTkLabel(scroll, text="⏳ กำลังประมวลผลข้อมูลสถิติภาพรวม...", font=ctk.CTkFont(family=self.font_family, size=15), text_color="#1a73e8")
+        lbl_load.pack(pady=40)
+        self.update_idletasks()
+
+        data = get_project_analytics(self.main_file, self.appr_file, self.att_file, self.col_config)
+        lbl_load.destroy()
+
+        sm = data['summary']
+
+        kpi_frame = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        kpi_frame.pack(fill="x", pady=(0, 14))
+        for c_i in range(3):
+            kpi_frame.grid_columnconfigure(c_i, weight=1)
+
+        kpi_list = [
+            ("👥 จำนวนพนักงานทั้งหมด", f"{sm.get('total_employees', 0)} คน", "#1a73e8", "#eff6ff"),
+            ("📅 งวดเวลาทำงาน", f"{sm.get('sheets_count', 0)} วัน", "#0f766e", "#f0fdfa"),
+            ("📁 ช่วงวันที่", sm.get('date_range', '-'), "#0369a1", "#f0f9ff"),
+            ("🏖️ ข้อมูลวันลาทั้งหมด", f"{sm.get('leave_updates', 0) + sm.get('leave_skips', 0)} รายการ", "#b45309", "#fffbeb"),
+            ("⏰ ข้อมูลใบแจ้งเวลาทั้งหมด", f"{sm.get('attend_updates', 0) + sm.get('attend_skips', 0)} ฉบับ", "#15803d", "#f0fdf4"),
+            ("🛡️ รายการที่ระบบกันพลาดทำงาน", f"{sm.get('skip_scan_count', 0) + sm.get('conflict_count', 0)} จุด", "#b91c1c", "#fef2f2")
+        ]
+
+        for idx, (title, val, fg, bg) in enumerate(kpi_list):
+            row_idx = idx // 3
+            col_idx = idx % 3
+            p = ctk.CTkFrame(kpi_frame, fg_color=bg, corner_radius=8, border_width=1, border_color="#e2e8f0")
+            p.grid(row=row_idx, column=col_idx, padx=8, pady=8, sticky="ew")
+            l1 = ctk.CTkLabel(p, text=title, font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=fg)
+            l1.pack(pady=(8, 2))
+            l2 = ctk.CTkLabel(p, text=val, font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"), text_color=fg)
+            l2.pack(pady=(0, 8))
+
+        # Section 1: Leave Breakdown (อ่านตรงจาก leave_type)
+        sec1 = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        sec1.pack(fill="x", pady=(0, 14))
+        lbl_s1_t = ctk.CTkLabel(sec1, text="🏖️ สถิติแยกตามประเภทการลา (Leave Breakdown)", font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#b45309")
+        lbl_s1_t.pack(anchor="w", padx=16, pady=(12, 6))
+
+        if data['leave_breakdown']:
+            for l_type, cnt in sorted(data['leave_breakdown'].items(), key=lambda x: -x[1]):
+                r_box = ctk.CTkFrame(sec1, fg_color="#fffbeb", corner_radius=6)
+                r_box.pack(fill="x", padx=16, pady=3)
+                r_box.grid_columnconfigure(0, weight=1)
+                l_lbl = ctk.CTkLabel(r_box, text=f"• {l_type}", font=ctk.CTkFont(family=self.font_family, size=13), text_color="#92400e")
+                l_lbl.grid(row=0, column=0, sticky="w", padx=10, pady=6)
+                c_lbl = ctk.CTkLabel(r_box, text=f"{cnt} รายการ", font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#b45309")
+                c_lbl.grid(row=0, column=1, sticky="e", padx=10, pady=6)
+        else:
+            lbl_no_l = ctk.CTkLabel(sec1, text="ไม่มีข้อมูลวันลาในงวดนี้", font=ctk.CTkFont(family=self.font_family, size=13), text_color="#94a3b8")
+            lbl_no_l.pack(anchor="w", padx=16, pady=8)
+
+        # Section 2: Attendance Breakdown
+        sec2 = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        sec2.pack(fill="x", pady=(0, 14))
+        lbl_s2_t = ctk.CTkLabel(sec2, text="⏰ สถิติใบแจ้งการมาทำงาน (Attendance Breakdown)", font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#15803d")
+        lbl_s2_t.pack(anchor="w", padx=16, pady=(12, 6))
+
+        for a_type, cnt in data['attend_breakdown'].items():
+            r_box = ctk.CTkFrame(sec2, fg_color="#f0fdf4", corner_radius=6)
+            r_box.pack(fill="x", padx=16, pady=3)
+            r_box.grid_columnconfigure(0, weight=1)
+            l_lbl = ctk.CTkLabel(r_box, text=f"• {a_type}", font=ctk.CTkFont(family=self.font_family, size=13), text_color="#166534")
+            l_lbl.grid(row=0, column=0, sticky="w", padx=10, pady=6)
+            c_lbl = ctk.CTkLabel(r_box, text=f"{cnt} รายการ", font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#15803d")
+            c_lbl.grid(row=0, column=1, sticky="e", padx=10, pady=6)
+
+        # Section 3: Safeguards
+        sec3 = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        sec3.pack(fill="x", pady=(0, 14))
+        lbl_s3_t = ctk.CTkLabel(sec3, text="🛡️ การตรวจสอบความถูกต้อง & ความปลอดภัย (Safeguard Status)", font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#1e293b")
+        lbl_s3_t.pack(anchor="w", padx=16, pady=(12, 6))
+
+        sg_items = [
+            ("• สแกนนิ้วครบแล้ว (ข้ามวันลา/แจ้งเวลา เพื่อกันพลาด)", sm.get('skip_scan_count', 0)),
+            ("• ข้อมูลเดิมตรงกันอยู่แล้วในตาราง", sm.get('skip_dup_count', 0)),
+            ("• ข้อมูลขัดแย้ง (พบทั้งวันลาและใบแจ้งเวลาในวันเดียวกัน)", sm.get('conflict_count', 0)),
+            ("• ไม่พบรหัสพนักงานในชีทของวันนั้น", sm.get('not_found_count', 0))
+        ]
+
+        for s_title, s_cnt in sg_items:
+            r_box = ctk.CTkFrame(sec3, fg_color="#f8fafc", corner_radius=6)
+            r_box.pack(fill="x", padx=16, pady=3)
+            r_box.grid_columnconfigure(0, weight=1)
+            l_lbl = ctk.CTkLabel(r_box, text=s_title, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155")
+            l_lbl.grid(row=0, column=0, sticky="w", padx=10, pady=6)
+            c_lbl = ctk.CTkLabel(r_box, text=f"{s_cnt} จุด", font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#0f172a")
+            c_lbl.grid(row=0, column=1, sticky="e", padx=10, pady=6)
+
+        sec3_pad = ctk.CTkFrame(sec3, fg_color="transparent", height=10)
+        sec3_pad.pack()
+
+
+# -------------------------------------------------------------
+# ระบบอัปเดตโปรแกรมอัตโนมัติผ่าน GitHub Releases (Auto-Updater)
+# -------------------------------------------------------------
+
+def parse_version_tuple(v_str):
+    """แปลงข้อความเวอร์ชัน เช่น 'v1.2.3' เป็น tuple ตัวเลข (1, 2, 3)"""
+    nums = re.findall(r'\d+', str(v_str))
+    if not nums:
+        return (0, 0, 0)
+    return tuple(int(x) for x in nums)
+
+
+def is_newer_version(remote_ver, local_ver):
+    """ส่งคืน True หาก remote_ver ใหม่กว่า local_ver"""
+    r_parts = parse_version_tuple(remote_ver)
+    l_parts = parse_version_tuple(local_ver)
+    max_len = max(len(r_parts), len(l_parts))
+    r_padded = r_parts + (0,) * (max_len - len(r_parts))
+    l_padded = l_parts + (0,) * (max_len - len(l_parts))
+    return r_padded > l_padded
+
+
+def check_github_update(repo_name, current_version=APP_VERSION):
+    """
+    ตรวจสอบเวอร์ชันล่าสุดจาก GitHub Releases API
+    Returns dict สรุปข้อมูลเวอร์ชัน, ลิงก์ดาวน์โหลด และ changelog
+    """
+    repo = (repo_name or "").strip().strip("/")
+    if not repo or "/" not in repo:
+        return {
+            'success': False,
+            'error_msg': f"รูปแบบชื่อ GitHub Repository ไม่ถูกต้อง ('{repo}') ต้องเป็น 'owner/repo' เช่น 'DietrichGebert/LeaveAutomation-1856'"
+        }
+
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": f"LeaveAutomation-Updater/{current_version}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            raw_data = response.read().decode("utf-8")
+            data = json.loads(raw_data)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {
+                'success': False,
+                'error_msg': f"ไม่พบ Release บน GitHub สำหรับ '{repo}' (404 Not Found)\nโปรดตรวจสอบว่าได้สร้าง Release และแนบไฟล์บน GitHub แล้ว หรือระบุชื่อ Repo ถูกต้อง"
+            }
+        elif e.code == 403:
+            return {
+                'success': False,
+                'error_msg': "GitHub API ติดการจำกัดจำนวนครั้ง (Rate Limit) กรุณารอสักครู่แล้วลองใหม่"
+            }
+        else:
+            return {
+                'success': False,
+                'error_msg': f"GitHub API ส่งรหัสข้อผิดพลาด HTTP {e.code}: {e.reason}"
+            }
+    except Exception as e:
+        return {
+            'success': False,
+            'error_msg': f"ไม่สามารถเชื่อมต่ออินเทอร์เน็ตหรือ GitHub ได้ ({str(e)})"
+        }
+
+    tag_name = data.get("tag_name", "").strip()
+    release_name = data.get("name", "") or tag_name
+    body = data.get("body", "") or "ไม่มีบันทึกการเปลี่ยนแปลง (No changelog provided)"
+    published_at = data.get("published_at", "")
+
+    # ตรวจสอบว่าเวอร์ชันใหม่กว่าหรือไม่
+    update_avail = is_newer_version(tag_name, current_version)
+
+    # ค้นหาไฟล์ Asset (.exe ก่อน, ตามด้วย .zip)
+    assets = data.get("assets", [])
+    target_asset = None
+    for a in assets:
+        name = a.get("name", "").lower()
+        if name.endswith(".exe"):
+            target_asset = a
+            break
+
+    if not target_asset:
+        for a in assets:
+            name = a.get("name", "").lower()
+            if name.endswith(".zip"):
+                target_asset = a
+                break
+
+    asset_url = target_asset.get("browser_download_url", "") if target_asset else ""
+    asset_name = target_asset.get("name", "") if target_asset else ""
+    asset_size = target_asset.get("size", 0) if target_asset else 0
+
+    return {
+        'success': True,
+        'tag_name': tag_name,
+        'release_name': release_name,
+        'published_at': published_at,
+        'body': body,
+        'update_available': update_avail,
+        'asset_url': asset_url,
+        'asset_name': asset_name,
+        'asset_size': asset_size,
+        'error_msg': ""
+    }
+
+
+class UpdateDialog(ctk.CTkToplevel):
+    def __init__(self, parent, current_version=APP_VERSION, github_repo=DEFAULT_GITHUB_REPO, icon_path=None, on_repo_save=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.current_version = current_version
+        self.github_repo = github_repo
+        self.icon_path = icon_path
+        self.on_repo_save = on_repo_save
+        self.font_family = "Tahoma"
+
+        self.release_data = None
+        self.is_downloading = False
+        self.is_cancelled = False
+
+        self.title("🔄 ตรวจสอบและอัปเดตโปรแกรม (Auto-Updater)")
+        center_window(self, 720, 640, parent)
+        self.minsize(680, 580)
+
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.setup_ui()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after_idle(lambda: self.attributes("-topmost", False))
+        self.grab_set()
+        self.focus_force()
+
+        # เริ่มตรวจสอบเวอร์ชันอัตโนมัติเมื่อเปิดหน้าต่าง
+        self.after(300, self.start_check_update)
+
+    def setup_ui(self):
+        # แถบหัวเรื่องสีฟ้า Google Blue
+        header = ctk.CTkFrame(self, fg_color="#1a73e8", corner_radius=0, height=75)
+        header.pack(fill="x")
+
+        lbl_t = ctk.CTkLabel(
+            header,
+            text="🔄 ระบบอัปเดตโปรแกรมอัตโนมัติ (Live Auto-Updater)",
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_t.pack(pady=(12, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            header,
+            text="ตรวจสอบและติดตั้งเวอร์ชันใหม่ล่าสุดจาก GitHub Releases โดยตรง ไม่ต้องดาวน์โหลดเอง",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#fef08a"
+        )
+        lbl_sub.pack(pady=(0, 12))
+
+        scroll = ctk.CTkScrollableFrame(self, fg_color="#f8fafc")
+        scroll.pack(fill="both", expand=True, padx=16, pady=10)
+
+        # -------------------------------------------------------------
+        # CARD 1: ข้อมูลเวอร์ชันและคลังโค้ด GitHub
+        # -------------------------------------------------------------
+        c1 = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        c1.pack(fill="x", pady=(0, 12))
+
+        lbl_c1_t = ctk.CTkLabel(
+            c1,
+            text="📁 ข้อมูลเวอร์ชันและคลังโค้ด (GitHub Repository)",
+            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
+            text_color="#1e293b"
+        )
+        lbl_c1_t.pack(anchor="w", padx=16, pady=(12, 6))
+
+        # แถวเวอร์ชันปัจจุบัน
+        row_ver = ctk.CTkFrame(c1, fg_color="transparent")
+        row_ver.pack(fill="x", padx=16, pady=3)
+        lbl_v1 = ctk.CTkLabel(row_ver, text="เวอร์ชันปัจจุบันในเครื่อง:", font=ctk.CTkFont(family=self.font_family, size=13), text_color="#475569")
+        lbl_v1.pack(side="left")
+        badge_v1 = ctk.CTkLabel(
+            row_ver,
+            text=f" v{self.current_version} ",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#e2e8f0",
+            text_color="#0f172a",
+            corner_radius=6
+        )
+        badge_v1.pack(side="left", padx=8)
+
+        # แถว GitHub Repo
+        row_repo = ctk.CTkFrame(c1, fg_color="transparent")
+        row_repo.pack(fill="x", padx=16, pady=6)
+        lbl_rp = ctk.CTkLabel(row_repo, text="GitHub Repo:", font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"), text_color="#334155")
+        lbl_rp.pack(side="left")
+        self.txt_repo = ctk.CTkEntry(
+            row_repo,
+            width=280,
+            height=32,
+            font=ctk.CTkFont(family=self.font_family, size=13)
+        )
+        self.txt_repo.insert(0, self.github_repo)
+        self.txt_repo.pack(side="left", padx=8)
+
+        btn_save_rp = ctk.CTkButton(
+            row_repo,
+            text="💾 บันทึก & ตรวจสอบ",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            text_color="#ffffff",
+            width=130,
+            height=32,
+            corner_radius=6,
+            command=self.on_save_repo_clicked
+        )
+        btn_save_rp.pack(side="left")
+
+        # แถวแสดงสถานะการตรวจสอบ
+        row_st = ctk.CTkFrame(c1, fg_color="#f1f5f9", corner_radius=8)
+        row_st.pack(fill="x", padx=16, pady=(6, 12))
+        self.lbl_status = ctk.CTkLabel(
+            row_st,
+            text="⏳ กำลังเตรียมตรวจสอบเวอร์ชันล่าสุด...",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            text_color="#0284c7",
+            wraplength=620,
+            justify="left"
+        )
+        self.lbl_status.pack(anchor="w", padx=12, pady=8)
+
+        # -------------------------------------------------------------
+        # CARD 2: ข้อมูลการอัปเดตและบันทึกการเปลี่ยนแปลง (Changelog)
+        # -------------------------------------------------------------
+        c2 = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        c2.pack(fill="x", pady=(0, 12))
+
+        lbl_c2_t = ctk.CTkLabel(
+            c2,
+            text="📦 รายละเอียดเวอร์ชันล่าสุด & บันทึกการเปลี่ยนแปลง (What's New)",
+            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
+            text_color="#1e293b"
+        )
+        lbl_c2_t.pack(anchor="w", padx=16, pady=(12, 4))
+
+        self.lbl_release_title = ctk.CTkLabel(
+            c2,
+            text="ชื่อเวอร์ชัน: -",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            text_color="#0f172a"
+        )
+        self.lbl_release_title.pack(anchor="w", padx=16, pady=2)
+
+        self.lbl_release_meta = ctk.CTkLabel(
+            c2,
+            text="📅 วันที่เผยแพร่: -   |   📦 ไฟล์: -",
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color="#64748b"
+        )
+        self.lbl_release_meta.pack(anchor="w", padx=16, pady=(0, 6))
+
+        lbl_ch_title = ctk.CTkLabel(c2, text="บันทึกการเปลี่ยนแปลง (Release Notes):", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color="#334155")
+        lbl_ch_title.pack(anchor="w", padx=16, pady=(4, 2))
+
+        self.txt_changelog = ctk.CTkTextbox(
+            c2,
+            height=130,
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            wrap="word",
+            border_width=1,
+            border_color="#cbd5e1",
+            fg_color="#f8fafc"
+        )
+        self.txt_changelog.pack(fill="x", padx=16, pady=(0, 12))
+
+        # -------------------------------------------------------------
+        # CARD 3: ความคืบหน้าการดาวน์โหลดและติดตั้ง
+        # -------------------------------------------------------------
+        c3 = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        c3.pack(fill="x", pady=(0, 12))
+
+        lbl_c3_t = ctk.CTkLabel(
+            c3,
+            text="⚡ ความคืบหน้าการดาวน์โหลดและติดตั้ง (Progress)",
+            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
+            text_color="#1e293b"
+        )
+        lbl_c3_t.pack(anchor="w", padx=16, pady=(12, 6))
+
+        self.prog_bar = ctk.CTkProgressBar(c3, height=16, corner_radius=8, progress_color="#16a34a")
+        self.prog_bar.pack(fill="x", padx=16, pady=4)
+        self.prog_bar.set(0.0)
+
+        self.lbl_progress = ctk.CTkLabel(
+            c3,
+            text="พร้อมดาวน์โหลด",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#475569"
+        )
+        self.lbl_progress.pack(anchor="w", padx=16, pady=(2, 12))
+
+        # -------------------------------------------------------------
+        # แถบปุ่มกดด้านล่าง (Action Buttons)
+        # -------------------------------------------------------------
+        bar_bottom = ctk.CTkFrame(self, fg_color="#ffffff", height=65, border_width=1, border_color="#e2e8f0")
+        bar_bottom.pack(fill="x", side="bottom")
+
+        btn_box = ctk.CTkFrame(bar_bottom, fg_color="transparent")
+        btn_box.pack(side="right", padx=16, pady=12)
+
+        self.btn_download = ctk.CTkButton(
+            btn_box,
+            text="⚡ อัปเดตทันที (ดาวน์โหลด & รีสตาร์ท)",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            fg_color="#16a34a",
+            hover_color="#15803d",
+            text_color="#ffffff",
+            height=42,
+            corner_radius=8,
+            state="disabled",
+            command=self.start_download_and_install
+        )
+        self.btn_download.pack(side="left", padx=6)
+
+        self.btn_check = ctk.CTkButton(
+            btn_box,
+            text="🔄 ตรวจสอบอีกครั้ง",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            text_color="#ffffff",
+            height=42,
+            corner_radius=8,
+            command=self.start_check_update
+        )
+        self.btn_check.pack(side="left", padx=6)
+
+        self.btn_close = ctk.CTkButton(
+            btn_box,
+            text="ปิดหน้าต่าง",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            fg_color="#64748b",
+            hover_color="#475569",
+            text_color="#ffffff",
+            height=42,
+            corner_radius=8,
+            command=self.destroy
+        )
+        self.btn_close.pack(side="left", padx=6)
+
+    def on_save_repo_clicked(self):
+        new_repo = self.txt_repo.get().strip()
+        if not new_repo or "/" not in new_repo:
+            messagebox.showwarning("แจ้งเตือน", "กรุณาระบุชื่อ GitHub Repository ในรูปแบบ 'owner/repo' เช่น 'DietrichGebert/LeaveAutomation-1856'")
+            return
+        self.github_repo = new_repo
+        if self.on_repo_save:
+            self.on_repo_save(new_repo)
+        self.start_check_update()
+
+    def start_check_update(self):
+        repo = self.txt_repo.get().strip() or self.github_repo
+        self.lbl_status.configure(text="⏳ กำลังตรวจสอบข้อมูลเวอร์ชันล่าสุดจาก GitHub Releases...", text_color="#0284c7")
+        self.btn_download.configure(state="disabled")
+        self.btn_check.configure(state="disabled")
+        self.txt_changelog.configure(state="normal")
+        self.txt_changelog.delete("1.0", "end")
+        self.txt_changelog.insert("1.0", "กำลังดึงข้อมูลบันทึกการเปลี่ยนแปลง...")
+        self.txt_changelog.configure(state="disabled")
+
+        def _worker():
+            res = check_github_update(repo, self.current_version)
+            self.after(0, lambda: self._on_check_completed(res))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_check_completed(self, res):
+        self.btn_check.configure(state="normal")
+        if not res.get("success"):
+            err = res.get("error_msg", "ไม่สามารถตรวจสอบการอัปเดตได้")
+            self.lbl_status.configure(text=f"⚠️ {err}", text_color="#ef4444")
+            self.lbl_release_title.configure(text="ชื่อเวอร์ชัน: -")
+            self.lbl_release_meta.configure(text="📅 วันที่เผยแพร่: -   |   📦 ไฟล์: -")
+            self.txt_changelog.configure(state="normal")
+            self.txt_changelog.delete("1.0", "end")
+            self.txt_changelog.insert(
+                "1.0",
+                f"ไม่สามารถดึงข้อมูลได้:\n{err}\n\nคำแนะนำการแก้ปัญหา:\n"
+                f"1. หากยังไม่ได้สร้าง GitHub Repository ให้สร้างบน https://github.com\n"
+                f"2. ไปที่ Releases -> Create a new release\n"
+                f"3. ตั้งชื่อแท็กเวอร์ชัน เช่น v1.0.1 แล้วอัปโหลดไฟล์ LeaveAutomation_1856.exe\n"
+                f"4. ตรวจสอบชื่อ Repository ด้านบนให้ถูกต้อง แล้วกด 'บันทึก & ตรวจสอบ'"
+            )
+            self.txt_changelog.configure(state="disabled")
+            self.btn_download.configure(state="disabled")
+            return
+
+        self.release_data = res
+        tag = res.get("tag_name", "")
+        name = res.get("release_name", "")
+        body = res.get("body", "")
+        pub = res.get("published_at", "")[:10]
+        size_bytes = res.get("asset_size", 0)
+        size_str = f"{size_bytes / (1024*1024):.1f} MB" if size_bytes > 0 else "ไม่ระบุ"
+        asset_name = res.get("asset_name", "")
+
+        self.lbl_release_title.configure(text=f"🎉 {tag}: {name}")
+        self.lbl_release_meta.configure(text=f"📅 เผยแพร่เมื่อ: {pub}   |   📦 ไฟล์: {asset_name or 'ไม่พบไฟล์'} ({size_str})")
+
+        self.txt_changelog.configure(state="normal")
+        self.txt_changelog.delete("1.0", "end")
+        self.txt_changelog.insert("1.0", body)
+        self.txt_changelog.configure(state="disabled")
+
+        if res.get("update_available"):
+            self.lbl_status.configure(text=f"✨ ตรวจพบเวอร์ชันใหม่ {tag} (พร้อมให้อัปเดต)", text_color="#16a34a")
+            if res.get("asset_url"):
+                self.btn_download.configure(
+                    text=f"⚡ ดาวน์โหลด & อัปเดตเป็น {tag} ทันที",
+                    state="normal",
+                    fg_color="#16a34a",
+                    hover_color="#15803d"
+                )
+            else:
+                self.lbl_status.configure(text=f"⚠️ พบเวอร์ชันใหม่ {tag} แต่ยังไม่มีไฟล์ .exe แนบใน Release", text_color="#eab308")
+                self.btn_download.configure(state="disabled")
+        else:
+            self.lbl_status.configure(text=f"✅ ท่านกำลังใช้งานเวอร์ชันล่าสุดแล้ว ({self.current_version})", text_color="#0284c7")
+            if res.get("asset_url"):
+                self.btn_download.configure(
+                    text=f"🔄 ดาวน์โหลดและติดตั้งเวอร์ชัน {tag} ซ้ำ",
+                    state="normal",
+                    fg_color="#0284c7",
+                    hover_color="#0369a1"
+                )
+            else:
+                self.btn_download.configure(state="disabled")
+
+    def start_download_and_install(self):
+        if not self.release_data or not self.release_data.get("asset_url"):
+            messagebox.showwarning("แจ้งเตือน", "ไม่พบลิงก์ดาวน์โหลดสำหรับเวอร์ชันนี้")
+            return
+
+        tag = self.release_data.get("tag_name", "")
+        confirm = messagebox.askyesno(
+            "ยืนยันการอัปเดต",
+            f"ระบบจะดาวน์โหลดเวอร์ชันใหม่ ({tag}) และรีสตาร์ทโปรแกรมโดยอัตโนมัติ\n\nต้องการดำเนินการต่อหรือไม่?"
+        )
+        if not confirm:
+            return
+
+        self.is_downloading = True
+        self.is_cancelled = False
+        self.btn_download.configure(state="disabled")
+        self.btn_check.configure(state="disabled")
+        self.btn_close.configure(state="disabled")
+        self.prog_bar.set(0.0)
+        self.lbl_progress.configure(text="⏳ กำลังเตรียมการเชื่อมต่อดาวน์โหลด...")
+
+        asset_url = self.release_data.get("asset_url")
+        asset_name = self.release_data.get("asset_name")
+        total_size = self.release_data.get("asset_size", 0)
+
+        threading.Thread(
+            target=self._download_worker,
+            args=(asset_url, asset_name, total_size),
+            daemon=True
+        ).start()
+
+    def _download_worker(self, asset_url, asset_name, total_size):
+        try:
+            is_frozen = getattr(sys, 'frozen', False)
+            if is_frozen:
+                current_exe = os.path.abspath(sys.executable)
+                exe_dir = os.path.dirname(current_exe)
+                exe_name = os.path.basename(current_exe)
+            else:
+                exe_dir = os.path.dirname(os.path.abspath(__file__))
+                exe_name = "LeaveAutomation_1856.exe"
+                current_exe = os.path.join(exe_dir, exe_name)
+
+            is_zip = asset_name.lower().endswith(".zip")
+            if is_zip:
+                temp_download = os.path.join(exe_dir, "temp_update_download.zip")
+            else:
+                temp_download = os.path.join(exe_dir, f"{exe_name}.new")
+
+            req = urllib.request.Request(
+                asset_url,
+                headers={"User-Agent": f"LeaveAutomation-Updater/{APP_VERSION}"}
+            )
+
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                actual_size = int(resp.headers.get("Content-Length", total_size or 0))
+                downloaded = 0
+                chunk_size = 128 * 1024  # 128 KB
+                with open(temp_download, "wb") as f:
+                    while True:
+                        if self.is_cancelled:
+                            break
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        frac = (downloaded / actual_size) if actual_size > 0 else 0.5
+                        mb_d = downloaded / (1024 * 1024)
+                        mb_t = actual_size / (1024 * 1024) if actual_size > 0 else 0
+                        percent = int(frac * 100) if actual_size > 0 else 50
+
+                        def _up(p=percent, d=mb_d, t=mb_t, fr=frac):
+                            self.prog_bar.set(fr)
+                            self.lbl_progress.configure(
+                                text=f"📥 กำลังดาวน์โหลด: {d:.1f} MB / {t:.1f} MB ({p}%)"
+                            )
+                        self.after(0, _up)
+
+            if self.is_cancelled:
+                try:
+                    if os.path.exists(temp_download):
+                        os.remove(temp_download)
+                except Exception:
+                    pass
+                return
+
+            target_new_exe = os.path.join(exe_dir, f"{exe_name}.new")
+            if is_zip:
+                def _unzip_msg():
+                    self.lbl_progress.configure(text="📦 กำลังแตกไฟล์เวอร์ชันใหม่...")
+                self.after(0, _unzip_msg)
+
+                with zipfile.ZipFile(temp_download, 'r') as zf:
+                    exe_inside = None
+                    for name in zf.namelist():
+                        if name.lower().endswith(".exe"):
+                            exe_inside = name
+                            break
+                    if not exe_inside:
+                        raise Exception("ไม่พบไฟล์ .exe ในไฟล์ .zip ที่ดาวน์โหลดมา")
+                    with zf.open(exe_inside) as src, open(target_new_exe, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                try:
+                    os.remove(temp_download)
+                except Exception:
+                    pass
+
+            # เตรียมการแทนที่และรันเวอร์ชันใหม่
+            if is_frozen:
+                def _prep_msg():
+                    self.prog_bar.set(1.0)
+                    self.lbl_progress.configure(text="🚀 กำลังติดตั้งและเริ่มโปรแกรมใหม่...")
+                self.after(0, _prep_msg)
+
+                bat_path = os.path.join(exe_dir, "updater.bat")
+                bat_content = f"""@echo off
+chcp 65001 >nul
+title อัปเดตโปรแกรม LeaveAutomation_1856
+echo ========================================================
+echo    กำลังดำเนินการอัปเดต LeaveAutomation_1856 เป็นเวอร์ชันใหม่...
+echo    กรุณารอสักครู่ ห้ามปิดหน้าต่างนี้
+echo ========================================================
+timeout /t 2 /nobreak >nul
+:retry
+del "{current_exe}" 2>nul
+if exist "{current_exe}" (
+    timeout /t 1 /nobreak >nul
+    goto retry
+)
+move /y "{target_new_exe}" "{current_exe}" >nul
+if not exist "{current_exe}" (
+    echo [ERROR] ไม่สามารถย้ายไฟล์เวอร์ชันใหม่ได้
+    pause
+    exit /b 1
+)
+echo ติดตั้งเสร็จสิ้น กำลังเปิดโปรแกรม...
+start "" "{current_exe}"
+del "%~f0"
+"""
+                with open(bat_path, "w", encoding="utf-8") as f:
+                    f.write(bat_content)
+
+                subprocess.Popen(
+                    ["cmd.exe", "/c", bat_path],
+                    cwd=exe_dir,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
+                )
+                self.after(500, self._exit_app)
+            else:
+                # โหมดพัฒนา (Python dev)
+                final_exe = os.path.join(exe_dir, "LeaveAutomation_1856.exe")
+                if os.path.exists(final_exe):
+                    try:
+                        os.remove(final_exe)
+                    except Exception:
+                        pass
+                shutil.move(target_new_exe, final_exe)
+
+                def _done_dev():
+                    self.prog_bar.set(1.0)
+                    self.lbl_progress.configure(text="✅ ดาวน์โหลดเสร็จสมบูรณ์!")
+                    self.btn_close.configure(state="normal")
+                    messagebox.showinfo(
+                        "อัปเดตสำเร็จ",
+                        f"ดาวน์โหลดไฟล์เวอร์ชันใหม่เรียบร้อยแล้ว:\n{final_exe}\n\n(เนื่องจากรันในโหมด Python Dev จึงไม่แทนที่ python.exe)"
+                    )
+                self.after(0, _done_dev)
+
+        except Exception as e:
+            def _err(err_str=str(e)):
+                self.lbl_progress.configure(text=f"❌ การดาวน์โหลดล้มเหลว: {err_str}", text_color="#ef4444")
+                self.btn_download.configure(state="normal")
+                self.btn_check.configure(state="normal")
+                self.btn_close.configure(state="normal")
+                messagebox.showerror("ข้อผิดพลาดในการอัปเดต", f"เกิดข้อผิดพลาดระหว่างดาวน์โหลด:\n{err_str}")
+            self.after(0, _err)
+
+    def _exit_app(self):
+        try:
+            self.parent.destroy()
+        except Exception:
+            pass
+        os._exit(0)
+
+
+# -------------------------------------------------------------
+# หน้าต่างโปรแกรมหลัก โมเดิร์นพรีเมียม CustomTkinter (Senior-Friendly)
+# -------------------------------------------------------------
+
+class ModernCustomTkinterApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("CNT STAFF TIME AUTOMATION BY OHM282")
+        self.root.geometry("1160x900")
+        self.root.minsize(1040, 780)
+        
+        self.font_family = "Tahoma"
+        self.output_file = None
+        self.report_file = None
+        self.is_processing = False
+        
+        # โหลดไอคอนนาฬิกา
+        self.icon_path = ensure_clock_icon()
+        if self.icon_path and os.path.exists(self.icon_path):
+            try:
+                self.root.iconbitmap(self.icon_path)
+            except Exception:
+                pass
+                
+        self.github_repo = DEFAULT_GITHUB_REPO
+        self.setup_ui()
+        self.load_saved_settings()
+
+        # ตรวจสอบการอัปเดตแบบเบื้องหลัง (Background update check)
+        self.root.after(2000, self.start_silent_update_check)
+
+    def setup_ui(self):
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_rowconfigure(1, weight=1)
+        
+        self.color_primary = "#1a73e8"      # Google Royal Blue
+        self.color_pineapple = "#f59e0b"    # Pineapple Gold
+        self.color_coconut = "#16a34a"      # Coconut Palm Green
+        self.color_card_bg = "#ffffff"
+        self.color_border = "#cbd5e1"
+        self.color_text_dark = "#0f172a"
+        self.color_text_muted = "#475569"
+
+        # -------------------------------------------------------------
+        # 1. แถบหัวเรื่องพรีเมียม (Header Banner + Toolbar)
+        # -------------------------------------------------------------
+        header_frame = ctk.CTkFrame(
+            self.root, 
+            corner_radius=0, 
+            fg_color=self.color_primary
+        )
+        header_frame.grid(row=0, column=0, sticky="ew")
+        header_frame.grid_columnconfigure(0, weight=1)
+        
+        # แถวบน: ชื่อโครงการ (ซ้าย) + แถบเครื่องมือ 4 ปุ่ม (ขวา)
+        header_top = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_top.pack(fill="x", padx=20, pady=(10, 4))
+        header_top.grid_columnconfigure(0, weight=1)
+
+        lbl_brand = ctk.CTkLabel(
+            header_top,
+            text="PINEAPPLE & COCONUT PROJECT (11856 / 11867)",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            text_color="#fef08a"
+        )
+        lbl_brand.grid(row=0, column=0, sticky="w")
+
+        toolbar_box = ctk.CTkFrame(header_top, fg_color="transparent")
+        toolbar_box.grid(row=0, column=1, sticky="e")
+
+        btn_manual = ctk.CTkButton(
+            toolbar_box,
+            text="คู่มือการใช้งาน",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#ffffff",
+            text_color="#1a73e8",
+            hover_color="#e0f2fe",
+            height=36,
+            corner_radius=8,
+            command=self.open_manual
+        )
+        btn_manual.grid(row=0, column=0, padx=4)
+
+        btn_analytics = ctk.CTkButton(
+            toolbar_box,
+            text="สถิติภาพรวม",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#ffffff",
+            text_color="#1a73e8",
+            hover_color="#e0f2fe",
+            height=36,
+            corner_radius=8,
+            command=self.open_analytics
+        )
+        btn_analytics.grid(row=0, column=1, padx=4)
+
+        btn_inspector = ctk.CTkButton(
+            toolbar_box,
+            text="ตรวจสอบรายคน",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#ffffff",
+            text_color="#1a73e8",
+            hover_color="#e0f2fe",
+            height=36,
+            corner_radius=8,
+            command=self.open_inspector
+        )
+        btn_inspector.grid(row=0, column=2, padx=4)
+
+        self.btn_update = ctk.CTkButton(
+            toolbar_box,
+            text=f"อัปเดต v{APP_VERSION}",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#ffffff",
+            text_color="#1a73e8",
+            hover_color="#e0f2fe",
+            height=36,
+            corner_radius=8,
+            command=self.open_updater
+        )
+        self.btn_update.grid(row=0, column=3, padx=4)
+
+        # แถวล่าง: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
+        header_title_bar = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_title_bar.pack(fill="x", padx=20, pady=(0, 10))
+
+        lbl_title = ctk.CTkLabel(
+            header_title_bar,
+            text="ระบบบันทึกข้อมูลการลา & แจ้งเวลาทำงานอัตโนมัติ (STAFF TIME)",
+            font=ctk.CTkFont(family=self.font_family, size=21, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_title.pack(anchor="w")
+
+        # -------------------------------------------------------------
+        # 2. พื้นที่เนื้อหาหลัก (Scrollable Card Container)
+        # -------------------------------------------------------------
+        main_scroll = ctk.CTkScrollableFrame(
+            self.root,
+            corner_radius=0,
+            fg_color="#f8fafc"
+        )
+        main_scroll.grid(row=1, column=0, sticky="nsew", padx=16, pady=12)
+        main_scroll.grid_columnconfigure(0, weight=1)
+
+        # CARD 1: ไฟล์ STAFF TIME (.xlsx)
+        card_main = ctk.CTkFrame(
+            main_scroll,
+            corner_radius=14,
+            fg_color=self.color_card_bg,
+            border_width=1.5,
+            border_color=self.color_border
+        )
+        card_main.grid(row=0, column=0, sticky="ew", pady=(0, 14), padx=4)
+        card_main.grid_columnconfigure(1, weight=1)
+
+        lbl_c1_title = ctk.CTkLabel(
+            card_main,
+            text="📁 1. ไฟล์ STAFF TIME (.xlsx)",
+            font=ctk.CTkFont(family=self.font_family, size=17, weight="bold"),
+            text_color=self.color_primary
+        )
+        lbl_c1_title.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 4))
+
+        lbl_main_desc = ctk.CTkLabel(
+            card_main,
+            text="ไฟล์หลักประจำงวด เช่น 1856 3-4-5 DD.111026-311026.xlsx (มีชีทรายวัน 11.10.26 - 31.10.26)",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color=self.color_text_muted
+        )
+        lbl_main_desc.grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 10))
+
+        lbl_c1_tag = ctk.CTkLabel(
+            card_main,
+            text="ไฟล์ STAFF TIME:",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            text_color=self.color_text_dark
+        )
+        lbl_c1_tag.grid(row=2, column=0, sticky="w", padx=(20, 10), pady=(0, 16))
+
+        self.txt_main = ctk.CTkEntry(
+            card_main,
+            placeholder_text="กรุณาคลิกเลือกไฟล์ STAFF TIME (.xlsx)...",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            height=44,
+            corner_radius=8,
+            border_color="#cbd5e1",
+            fg_color="#f8fafc"
+        )
+        self.txt_main.grid(row=2, column=1, sticky="ew", padx=(0, 12), pady=(0, 16))
+
+        btn_browse_main = ctk.CTkButton(
+            card_main,
+            text="📂 เลือกไฟล์ STAFF TIME...",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            fg_color=self.color_primary,
+            hover_color="#1557b0",
+            height=44,
+            width=180,
+            corner_radius=8,
+            command=self.browse_main
+        )
+        btn_browse_main.grid(row=2, column=2, padx=(0, 20), pady=(0, 16))
+
+        # CARD 2: ข้อมูลนำเข้า 2 แหล่ง (การลาที่ได้รับการอนุมัติ & ใบแจ้งการมาทำงาน)
+        card_sources = ctk.CTkFrame(
+            main_scroll,
+            corner_radius=14,
+            fg_color=self.color_card_bg,
+            border_width=1.5,
+            border_color=self.color_border
+        )
+        card_sources.grid(row=1, column=0, sticky="ew", pady=(0, 14), padx=4)
+        card_sources.grid_columnconfigure(0, weight=1)
+        card_sources.grid_columnconfigure(1, weight=1)
+
+        # 2.1 การลาที่ได้รับการอนุมัติ (ฝั่งซ้าย)
+        frame_leave = ctk.CTkFrame(
+            card_sources,
+            corner_radius=10,
+            fg_color="#fffbeb",
+            border_width=1.5,
+            border_color="#fde68a"
+        )
+        frame_leave.grid(row=0, column=0, sticky="nsew", padx=(16, 8), pady=16)
+        frame_leave.grid_columnconfigure(0, weight=1)
+
+        lbl_leave_h = ctk.CTkLabel(
+            frame_leave,
+            text="🏖️ 2.1 การลาที่ได้รับการอนุมัติ (CNTIWEB)",
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text_color="#b45309"
+        )
+        lbl_leave_h.grid(row=0, column=0, sticky="w", padx=14, pady=(14, 6))
+
+        self.txt_appr = ctk.CTkEntry(
+            frame_leave,
+            placeholder_text="เลือกไฟล์การลาที่ได้รับการอนุมัติ เช่น อนุมัติ.xlsx (ถ้ามี)...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=40,
+            corner_radius=8,
+            border_color="#fcd34d",
+            fg_color="#ffffff"
+        )
+        self.txt_appr.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+
+        btn_box_leave = ctk.CTkFrame(frame_leave, fg_color="transparent")
+        btn_box_leave.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
+        btn_box_leave.grid_columnconfigure(0, weight=1)
+
+        btn_browse_appr = ctk.CTkButton(
+            btn_box_leave,
+            text="📂 เลือกการลาที่ได้รับการอนุมัติ...",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color=self.color_pineapple,
+            hover_color="#d97706",
+            height=38,
+            corner_radius=8,
+            command=self.browse_appr
+        )
+        btn_browse_appr.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+        btn_clear_appr = ctk.CTkButton(
+            btn_box_leave,
+            text="✕ ล้าง",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            fg_color="#e2e8f0",
+            hover_color="#cbd5e1",
+            text_color="#334155",
+            height=38,
+            width=70,
+            corner_radius=8,
+            command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings()]
+        )
+        btn_clear_appr.grid(row=0, column=1)
+
+        lbl_leave_rules = ctk.CTkLabel(
+            frame_leave,
+            text="• ตัดเฉพาะชื่อภาษาไทย (เช่น ลาป่วย)\n• ลาไม่เต็มวัน เติม ชม. + ปรับเวลาเข้า/ออก\n• ช่องรหัสย่อ: พักร้อน=พ | ป่วย=ป | กิจ/อื่นๆ=อ",
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color="#92400e",
+            justify="left"
+        )
+        lbl_leave_rules.grid(row=3, column=0, sticky="w", padx=14, pady=(0, 14))
+
+        # 2.2 ใบแจ้งการมาทำงาน (ฝั่งขวา)
+        frame_att = ctk.CTkFrame(
+            card_sources,
+            corner_radius=10,
+            fg_color="#f0fdf4",
+            border_width=1.5,
+            border_color="#bbf7d0"
+        )
+        frame_att.grid(row=0, column=1, sticky="nsew", padx=(8, 16), pady=16)
+        frame_att.grid_columnconfigure(0, weight=1)
+
+        lbl_att_h = ctk.CTkLabel(
+            frame_att,
+            text="⏰ 2.2 ใบแจ้งการมาทำงาน (ลืมสแกนนิ้ว)",
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text_color="#15803d"
+        )
+        lbl_att_h.grid(row=0, column=0, sticky="w", padx=14, pady=(14, 6))
+
+        self.txt_att = ctk.CTkEntry(
+            frame_att,
+            placeholder_text="เลือกไฟล์ใบแจ้งการมาทำงาน.xlsx (ถ้ามี)...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=40,
+            corner_radius=8,
+            border_color="#86efac",
+            fg_color="#ffffff"
+        )
+        self.txt_att.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+
+        btn_box_att = ctk.CTkFrame(frame_att, fg_color="transparent")
+        btn_box_att.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
+        btn_box_att.grid_columnconfigure(0, weight=1)
+
+        btn_browse_att = ctk.CTkButton(
+            btn_box_att,
+            text="📂 เลือกใบแจ้งการมาทำงาน...",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color=self.color_coconut,
+            hover_color="#15803d",
+            height=38,
+            corner_radius=8,
+            command=self.browse_att
+        )
+        btn_browse_att.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+        btn_clear_att = ctk.CTkButton(
+            btn_box_att,
+            text="✕ ล้าง",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            fg_color="#e2e8f0",
+            hover_color="#cbd5e1",
+            text_color="#334155",
+            height=38,
+            width=70,
+            corner_radius=8,
+            command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings()]
+        )
+        btn_clear_att.grid(row=0, column=1)
+
+        lbl_att_rules = ctk.CTkLabel(
+            frame_att,
+            text="• เช้า -> ปรับช่อง Check-in เป็น 7:30\n• เย็น -> เริ่ม 16:30 ปัดเศษนาทีลงช่วงละ 30 นาที\n• ใส่หมายเหตุ 'มีใบแจ้งฯ' อัตโนมัติ",
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color="#166534",
+            justify="left"
+        )
+        lbl_att_rules.grid(row=3, column=0, sticky="w", padx=14, pady=(0, 14))
+
+        # CARD 3: กำหนดช่องคอลัมน์เป้าหมายในไฟล์ STAFF TIME
+        card_cols = ctk.CTkFrame(
+            main_scroll,
+            corner_radius=14,
+            fg_color=self.color_card_bg,
+            border_width=1.5,
+            border_color=self.color_border
+        )
+        card_cols.grid(row=2, column=0, sticky="ew", pady=(0, 14), padx=4)
+
+        self.cols_expanded = False
+
+        self.btn_toggle_cols = ctk.CTkButton(
+            card_cols,
+            text="▶   ⚙️ 3. กำหนดช่องคอลัมน์เป้าหมายในไฟล์ STAFF TIME (คลิกเพื่อเปิดแก้ไข  |  ค่ามาตรฐาน: A, B, E, G, L, M, Q, แถว 2)",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#f0f9ff",
+            hover_color="#e0f2fe",
+            text_color="#0369a1",
+            anchor="w",
+            height=40,
+            corner_radius=10,
+            command=self.toggle_column_settings
+        )
+        self.btn_toggle_cols.pack(fill="x", padx=10, pady=8)
+
+        self.frame_cols_body = ctk.CTkFrame(card_cols, fg_color="transparent")
+
+        header_cols_box = ctk.CTkFrame(self.frame_cols_body, fg_color="transparent")
+        header_cols_box.pack(fill="x", padx=10, pady=(6, 4))
+        header_cols_box.grid_columnconfigure(0, weight=1)
+
+        lbl_cols_title = ctk.CTkLabel(
+            header_cols_box,
+            text="ปรับแต่งตำแหน่งคอลัมน์เป้าหมายในไฟล์ STAFF TIME:",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            text_color="#0284c7"
+        )
+        lbl_cols_title.grid(row=0, column=0, sticky="w")
+
+        btn_reset_cols = ctk.CTkButton(
+            header_cols_box,
+            text="🔄 คืนค่าเริ่มต้น",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#e0f2fe",
+            hover_color="#bae6fd",
+            text_color="#0369a1",
+            height=30,
+            width=120,
+            corner_radius=8,
+            command=self.reset_column_defaults
+        )
+        btn_reset_cols.grid(row=0, column=1, sticky="e")
+
+        lbl_cols_hint = ctk.CTkLabel(
+            self.frame_cols_body,
+            text="* สามารถแก้ไขตัวอักษรช่องคอลัมน์ได้ทันที หากตารางข้อมูลของแต่ละโครงการหรือแต่ละคนอยู่คนละช่องกัน (ช่อง B ใช้ทำ Double-Check ชื่อพนักงาน)",
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color=self.color_text_muted
+        )
+        lbl_cols_hint.pack(anchor="w", padx=10, pady=(0, 10))
+
+        col_inputs_frame = ctk.CTkFrame(self.frame_cols_body, fg_color="#f8fafc", corner_radius=10, border_width=1, border_color="#e2e8f0")
+        col_inputs_frame.pack(fill="x", padx=6, pady=(0, 10))
+        for col_i in range(8):
+            col_inputs_frame.grid_columnconfigure(col_i, weight=1)
+
+        # 1. รหัสพนักงาน
+        lbl_c_emp = ctk.CTkLabel(col_inputs_frame, text="รหัสพนักงาน", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_emp.grid(row=0, column=0, pady=(10, 2))
+        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_emp.insert(0, "A")
+        self.entry_col_emp.grid(row=1, column=0, pady=(0, 10))
+
+        # 2. ชื่อพนักงาน
+        lbl_c_name = ctk.CTkLabel(col_inputs_frame, text="ชื่อพนักงาน", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_name.grid(row=0, column=1, pady=(10, 2))
+        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_name.insert(0, "B")
+        self.entry_col_name.grid(row=1, column=1, pady=(0, 10))
+
+        # 3. สแกนนิ้วดิบ
+        lbl_c_scan = ctk.CTkLabel(col_inputs_frame, text="สแกนดิบ", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_scan.grid(row=0, column=2, pady=(10, 2))
+        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_scan.insert(0, "E")
+        self.entry_col_scan.grid(row=1, column=2, pady=(0, 10))
+
+        # 4. ประเภทลา / หมายเหตุ
+        lbl_c_leave = ctk.CTkLabel(col_inputs_frame, text="ประเภทลา", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_leave.grid(row=0, column=3, pady=(10, 2))
+        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_leave.insert(0, "G")
+        self.entry_col_leave.grid(row=1, column=3, pady=(0, 10))
+
+        # 5. เวลาเข้า
+        lbl_c_in = ctk.CTkLabel(col_inputs_frame, text="เวลาเข้า (In)", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_in.grid(row=0, column=4, pady=(10, 2))
+        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_in.insert(0, "L")
+        self.entry_col_in.grid(row=1, column=4, pady=(0, 10))
+
+        # 6. เวลาออก
+        lbl_c_out = ctk.CTkLabel(col_inputs_frame, text="เวลาออก (Out)", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_out.grid(row=0, column=5, pady=(10, 2))
+        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_out.insert(0, "M")
+        self.entry_col_out.grid(row=1, column=5, pady=(0, 10))
+
+        # 7. รหัสย่อ
+        lbl_c_code = ctk.CTkLabel(col_inputs_frame, text="รหัสย่อ", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_code.grid(row=0, column=6, pady=(10, 2))
+        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_col_code.insert(0, "Q")
+        self.entry_col_code.grid(row=1, column=6, pady=(0, 10))
+
+        # 8. เริ่มแถวที่
+        lbl_c_row = ctk.CTkLabel(col_inputs_frame, text="เริ่มแถวที่", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_row.grid(row=0, column=7, pady=(10, 2))
+        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), width=60, height=36, justify="center")
+        self.entry_start_row.insert(0, "2")
+        self.entry_start_row.grid(row=1, column=7, pady=(0, 10))
+
+        # แถบตั้งค่า GitHub Repository สำหรับระบบอัปเดตอัตโนมัติ
+        repo_bar = ctk.CTkFrame(self.frame_cols_body, fg_color="#f8fafc", corner_radius=10, border_width=1, border_color="#e2e8f0")
+        repo_bar.pack(fill="x", padx=6, pady=(4, 10))
+
+        lbl_repo = ctk.CTkLabel(
+            repo_bar,
+            text="🔗 GitHub Repository (สำหรับปุ่มอัปเดตอัตโนมัติ):",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            text_color=self.color_text_dark
+        )
+        lbl_repo.pack(side="left", padx=(14, 8), pady=8)
+
+        self.entry_github_repo = ctk.CTkEntry(
+            repo_bar,
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            width=280,
+            height=34
+        )
+        self.entry_github_repo.insert(0, self.github_repo)
+        self.entry_github_repo.pack(side="left", padx=4, pady=8)
+
+        btn_save_repo = ctk.CTkButton(
+            repo_bar,
+            text="💾 บันทึก Repo",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            text_color="#ffffff",
+            height=34,
+            width=110,
+            corner_radius=8,
+            command=self.save_github_repo_from_entry
+        )
+        btn_save_repo.pack(side="left", padx=(4, 10), pady=8)
+
+        # CARD 4: รูปแบบการบันทึกไฟล์ (Save Options)
+        card_save = ctk.CTkFrame(
+            main_scroll,
+            corner_radius=14,
+            fg_color=self.color_card_bg,
+            border_width=1.5,
+            border_color=self.color_border
+        )
+        card_save.grid(row=3, column=0, sticky="ew", pady=(0, 14), padx=4)
+        
+        lbl_save_title = ctk.CTkLabel(
+            card_save,
+            text="💾 4. รูปแบบการบันทึกไฟล์ผลลัพธ์:",
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text_color=self.color_text_dark
+        )
+        lbl_save_title.pack(anchor="w", padx=20, pady=(14, 8))
+
+        self.save_mode_var = tk.StringVar(value="new_file")
+        
+        radio_box = ctk.CTkFrame(card_save, fg_color="transparent")
+        radio_box.pack(fill="x", padx=20, pady=(0, 16))
+        
+        r1 = ctk.CTkRadioButton(
+            radio_box,
+            text="สร้างไฟล์ใหม่ (มี _updated_วันที่ ปลอดภัยสูงสุด แนะนำ)",
+            variable=self.save_mode_var,
+            value="new_file",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            radiobutton_width=22,
+            radiobutton_height=22,
+            fg_color=self.color_primary,
+            command=self.save_current_settings
+        )
+        r1.pack(side="left", padx=(0, 32))
+        
+        r2 = ctk.CTkRadioButton(
+            radio_box,
+            text="บันทึกทับไฟล์เดิม (ระบบจะสร้างไฟล์ Backup สำรองให้อัตโนมัติ)",
+            variable=self.save_mode_var,
+            value="overwrite",
+            font=ctk.CTkFont(family=self.font_family, size=14),
+            radiobutton_width=22,
+            radiobutton_height=22,
+            fg_color=self.color_primary,
+            command=self.save_current_settings
+        )
+        r2.pack(side="left")
+
+        # 5. ปุ่มแอคชันหลัก: ตรวจสอบรายการแก้ไข & ปุ่มเริ่มประมวลผล
+        action_frame = ctk.CTkFrame(main_scroll, fg_color="transparent")
+        action_frame.grid(row=4, column=0, sticky="ew", pady=(6, 12), padx=4)
+        action_frame.grid_columnconfigure(0, weight=1)
+
+        self.btn_preview = ctk.CTkButton(
+            action_frame,
+            text="🔍   ตรวจสอบ & แสดงรายการแก้ไขทั้งหมดในไฟล์ STAFF TIME (Pre-Check Preview)",
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            height=48,
+            corner_radius=10,
+            command=self.open_preview
+        )
+        self.btn_preview.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+
+        self.btn_process = ctk.CTkButton(
+            action_frame,
+            text="🚀   เริ่มประมวลผลและอัปเดตข้อมูลอัตโนมัติ",
+            font=ctk.CTkFont(family=self.font_family, size=18, weight="bold"),
+            fg_color=self.color_pineapple,
+            hover_color="#d97706",
+            height=58,
+            corner_radius=12,
+            command=self.start_processing_thread
+        )
+        self.btn_process.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+
+        self.progress_bar = ctk.CTkProgressBar(
+            action_frame,
+            height=14,
+            corner_radius=7,
+            progress_color=self.color_coconut,
+            fg_color="#e2e8f0"
+        )
+        self.progress_bar.set(0.0)
+        self.progress_bar.grid(row=2, column=0, sticky="ew")
+
+        # 6. หน้าต่างแสดงผลการทำงาน (Live Log Box)
+        card_log = ctk.CTkFrame(
+            main_scroll,
+            corner_radius=14,
+            fg_color=self.color_card_bg,
+            border_width=1.5,
+            border_color=self.color_border
+        )
+        card_log.grid(row=5, column=0, sticky="ew", pady=(4, 14), padx=4)
+        card_log.grid_columnconfigure(0, weight=1)
+
+        log_top_frame = ctk.CTkFrame(card_log, fg_color="transparent")
+        log_top_frame.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 8))
+        log_top_frame.grid_columnconfigure(0, weight=1)
+
+        lbl_log_title = ctk.CTkLabel(
+            log_top_frame,
+            text="📋 รายละเอียดการทำงานแบบ Real-time:",
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text_color=self.color_text_dark
+        )
+        lbl_log_title.grid(row=0, column=0, sticky="w")
+
+        self.btn_open_report = ctk.CTkButton(
+            log_top_frame,
+            text="📊 เปิดรายงานตรวจสอบ (Audit)",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color=self.color_coconut,
+            hover_color="#15803d",
+            height=36,
+            corner_radius=8,
+            state="disabled",
+            command=self.open_audit_report
+        )
+        self.btn_open_report.grid(row=0, column=1, padx=(0, 8))
+
+        self.btn_open_folder = ctk.CTkButton(
+            log_top_frame,
+            text="📂 เปิดโฟลเดอร์ไฟล์",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color=self.color_primary,
+            hover_color="#1557b0",
+            height=36,
+            corner_radius=8,
+            state="disabled",
+            command=self.open_result_folder
+        )
+        self.btn_open_folder.grid(row=0, column=2, padx=(0, 8))
+
+        btn_clear_log = ctk.CTkButton(
+            log_top_frame,
+            text="🗑️ ล้าง Log",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            fg_color="#e2e8f0",
+            hover_color="#cbd5e1",
+            text_color="#334155",
+            height=36,
+            width=85,
+            corner_radius=8,
+            command=self.clear_log
+        )
+        btn_clear_log.grid(row=0, column=3)
+
+        self.txt_log = ctk.CTkTextbox(
+            card_log,
+            height=260,
+            corner_radius=10,
+            font=ctk.CTkFont(family="Tahoma", size=14),
+            fg_color="#ffffff",
+            text_color="#0f172a",
+            border_width=1.5,
+            border_color="#cbd5e1"
+        )
+        self.txt_log.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 18))
+
+        self.log("🕒 ระบบพร้อมทำงาน... กรุณาเลือกไฟล์ STAFF TIME และข้อมูลที่ต้องการ")
+        self.log("💡 คำแนะนำ: คุณสามารถกด '🔍 ตรวจสอบ & แสดงรายการแก้ไขทั้งหมด' เพื่อดูพรีวิวทุกจุดก่อนบันทึกจริงได้เสมอ")
+
+    # -------------------------------------------------------------
+    # ระบบการบันทึก & โหลดการตั้งค่า (Settings Persistence)
+    # -------------------------------------------------------------
+
+    def load_saved_settings(self):
+        settings = load_app_settings()
+        if not settings:
+            return
+
+        main_f = settings.get("main_file", "")
+        if main_f and os.path.exists(main_f):
+            self.txt_main.insert(0, main_f)
+
+        appr_f = settings.get("appr_file", "")
+        if appr_f and os.path.exists(appr_f):
+            self.txt_appr.insert(0, appr_f)
+
+        att_f = settings.get("att_file", "")
+        if att_f and os.path.exists(att_f):
+            self.txt_att.insert(0, att_f)
+
+        col_cfg = settings.get("col_config", {})
+        if col_cfg:
+            self.entry_col_emp.delete(0, 'end'); self.entry_col_emp.insert(0, col_cfg.get('emp_id_col', 'A'))
+            self.entry_col_name.delete(0, 'end'); self.entry_col_name.insert(0, col_cfg.get('emp_name_col', 'B'))
+            self.entry_col_scan.delete(0, 'end'); self.entry_col_scan.insert(0, col_cfg.get('scan_col', 'E'))
+            self.entry_col_leave.delete(0, 'end'); self.entry_col_leave.insert(0, col_cfg.get('leave_type_col', 'G'))
+            self.entry_col_in.delete(0, 'end'); self.entry_col_in.insert(0, col_cfg.get('checkin_col', 'L'))
+            self.entry_col_out.delete(0, 'end'); self.entry_col_out.insert(0, col_cfg.get('checkout_col', 'M'))
+            self.entry_col_code.delete(0, 'end'); self.entry_col_code.insert(0, col_cfg.get('leave_code_col', 'Q'))
+            self.entry_start_row.delete(0, 'end'); self.entry_start_row.insert(0, str(col_cfg.get('start_row', '2')))
+
+        sm = settings.get("save_mode", "new_file")
+        if sm in ["new_file", "overwrite"]:
+            self.save_mode_var.set(sm)
+
+        self.github_repo = settings.get("github_repo", DEFAULT_GITHUB_REPO)
+        if hasattr(self, "entry_github_repo"):
+            self.entry_github_repo.delete(0, 'end')
+            self.entry_github_repo.insert(0, self.github_repo)
+
+    def save_current_settings(self):
+        repo_val = self.github_repo
+        if hasattr(self, "entry_github_repo"):
+            val = self.entry_github_repo.get().strip()
+            if val:
+                repo_val = val
+                self.github_repo = repo_val
+        data = {
+            "main_file": self.txt_main.get().strip(),
+            "appr_file": self.txt_appr.get().strip(),
+            "att_file": self.txt_att.get().strip(),
+            "save_mode": self.save_mode_var.get(),
+            "github_repo": repo_val,
+            "col_config": self.get_column_config()
+        }
+        save_app_settings(data)
+
+    # -------------------------------------------------------------
+    # UI Actions & Modal Openers
+    # -------------------------------------------------------------
+
+    def open_updater(self):
+        UpdateDialog(
+            self.root,
+            current_version=APP_VERSION,
+            github_repo=self.github_repo,
+            icon_path=self.icon_path,
+            on_repo_save=self.on_updater_repo_saved
+        )
+
+    def on_updater_repo_saved(self, new_repo):
+        self.github_repo = new_repo
+        if hasattr(self, "entry_github_repo"):
+            self.entry_github_repo.delete(0, 'end')
+            self.entry_github_repo.insert(0, new_repo)
+        self.save_current_settings()
+        self.log(f"💾 บันทึก GitHub Repository: {new_repo}")
+        self.start_silent_update_check()
+
+    def save_github_repo_from_entry(self):
+        new_repo = self.entry_github_repo.get().strip()
+        if not new_repo:
+            new_repo = DEFAULT_GITHUB_REPO
+            self.entry_github_repo.delete(0, 'end')
+            self.entry_github_repo.insert(0, new_repo)
+        self.github_repo = new_repo
+        self.save_current_settings()
+        self.log(f"💾 บันทึก GitHub Repository เรียบร้อย: {new_repo}")
+        messagebox.showinfo("บันทึกสำเร็จ", f"บันทึก GitHub Repository เรียบร้อย:\n{new_repo}")
+        self.start_silent_update_check()
+
+    def start_silent_update_check(self):
+        threading.Thread(target=self._worker_silent_check, daemon=True).start()
+
+    def _worker_silent_check(self):
+        try:
+            res = check_github_update(self.github_repo, APP_VERSION)
+            if res and res.get("success") and res.get("update_available"):
+                tag = res.get("tag_name", "")
+                def _update_ui():
+                    if hasattr(self, "btn_update"):
+                        self.btn_update.configure(
+                            text=f"มีอัปเดตใหม่ ({tag})!",
+                            fg_color="#f59e0b",
+                            text_color="#ffffff",
+                            hover_color="#d97706"
+                        )
+                self.root.after(0, _update_ui)
+        except Exception:
+            pass
+
+    def open_manual(self):
+        ManualDialog(self.root, self.icon_path)
+
+    def open_inspector(self):
+        main_file = self.txt_main.get().strip()
+        appr_file = self.txt_appr.get().strip()
+        att_file = self.txt_att.get().strip()
+        col_cfg = self.get_column_config()
+
+        if not main_file or not os.path.exists(main_file):
+            messagebox.showerror("แจ้งเตือน", "กรุณาเลือกไฟล์ STAFF TIME (.xlsx) ให้ถูกต้องก่อนใช้งานระบบตรวจสอบรายคน")
+            return
+
+        InspectorDialog(self.root, main_file, appr_file, att_file, col_cfg, self.icon_path)
+
+    def open_analytics(self):
+        main_file = self.txt_main.get().strip()
+        appr_file = self.txt_appr.get().strip()
+        att_file = self.txt_att.get().strip()
+        col_cfg = self.get_column_config()
+
+        if not main_file or not os.path.exists(main_file):
+            messagebox.showerror("แจ้งเตือน", "กรุณาเลือกไฟล์ STAFF TIME (.xlsx) ให้ถูกต้องก่อนดูสถิติภาพรวม")
+            return
+
+        AnalyticsDialog(self.root, main_file, appr_file, att_file, col_cfg, self.icon_path)
+
+    def open_preview(self):
+        main_file = self.txt_main.get().strip()
+        appr_file = self.txt_appr.get().strip()
+        att_file = self.txt_att.get().strip()
+        col_cfg = self.get_column_config()
+
+        if not main_file or not os.path.exists(main_file):
+            messagebox.showerror("แจ้งเตือน", "กรุณาเลือกไฟล์ STAFF TIME (.xlsx) ให้ถูกต้องก่อนตรวจสอบรายการแก้ไข")
+            return
+
+        if (not appr_file or not os.path.exists(appr_file)) and (not att_file or not os.path.exists(att_file)):
+            messagebox.showwarning("แจ้งเตือน", "กรุณาเลือกอย่างน้อย 1 ไฟล์ (การลาที่ได้รับการอนุมัติ หรือ ใบแจ้งการมาทำงาน)")
+            return
+
+        self.btn_preview.configure(text="⏳ กำลังจำลองและดึงรายการแก้ไขทั้งหมด...", state="disabled")
+        self.progress_bar.set(0.05)
+
+        def _worker():
+            try:
+                def _log(msg):
+                    self.root.after(0, lambda m=msg: self.log(m))
+                def _prog(val):
+                    self.root.after(0, lambda v=val: self.progress_bar.set(v / 100.0))
+
+                summary, items = simulate_all_changes(
+                    main_file, appr_file, att_file, col_cfg,
+                    log_callback=_log, progress_callback=_prog
+                )
+
+                def _show():
+                    self.btn_preview.configure(
+                        text="🔍   ตรวจสอบ & แสดงรายการแก้ไขทั้งหมดในไฟล์ STAFF TIME (Pre-Check Preview)",
+                        state="normal"
+                    )
+                    self.progress_bar.set(1.0)
+                    PreviewDialog(self.root, summary, items, on_proceed_callback=self.start_processing_thread, icon_path=self.icon_path)
+
+                self.root.after(0, _show)
+            except Exception as e:
+                def _err(err_msg):
+                    self.btn_preview.configure(
+                        text="🔍   ตรวจสอบ & แสดงรายการแก้ไขทั้งหมดในไฟล์ STAFF TIME (Pre-Check Preview)",
+                        state="normal"
+                    )
+                    self.progress_bar.set(0.0)
+                    messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถจำลองการแก้ไขได้:\n{err_msg}")
+                self.root.after(0, lambda err=str(e): _err(err))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def toggle_column_settings(self):
+        if self.cols_expanded:
+            self.frame_cols_body.pack_forget()
+            self.btn_toggle_cols.configure(
+                text="▶   ⚙️ 3. กำหนดช่องคอลัมน์เป้าหมายในไฟล์ STAFF TIME (คลิกเพื่อเปิดแก้ไข  |  ค่ามาตรฐาน: A, B, E, G, L, M, Q, แถว 2)",
+                fg_color="#f0f9ff"
+            )
+            self.cols_expanded = False
+        else:
+            self.frame_cols_body.pack(fill="x", padx=10, pady=(0, 10))
+            self.btn_toggle_cols.configure(
+                text="▼   ⚙️ 3. ซ่อนการตั้งค่าช่องคอลัมน์เป้าหมายในไฟล์ STAFF TIME (คลิกเพื่อพับเก็บ)",
+                fg_color="#e0f2fe"
+            )
+            self.cols_expanded = True
+
+    def reset_column_defaults(self):
+        defaults = get_default_column_config()
+        self.entry_col_emp.delete(0, 'end'); self.entry_col_emp.insert(0, defaults['emp_id_col'])
+        self.entry_col_name.delete(0, 'end'); self.entry_col_name.insert(0, defaults['emp_name_col'])
+        self.entry_col_scan.delete(0, 'end'); self.entry_col_scan.insert(0, defaults['scan_col'])
+        self.entry_col_leave.delete(0, 'end'); self.entry_col_leave.insert(0, defaults['leave_type_col'])
+        self.entry_col_in.delete(0, 'end'); self.entry_col_in.insert(0, defaults['checkin_col'])
+        self.entry_col_out.delete(0, 'end'); self.entry_col_out.insert(0, defaults['checkout_col'])
+        self.entry_col_code.delete(0, 'end'); self.entry_col_code.insert(0, defaults['leave_code_col'])
+        self.entry_start_row.delete(0, 'end'); self.entry_start_row.insert(0, str(defaults['start_row']))
+        self.save_current_settings()
+        self.log("🔄 คืนค่าคอลัมน์เป็นค่ามาตรฐานเรียบร้อย: A, B, E, G, L, M, Q, แถวที่ 2")
+
+    def get_column_config(self):
+        return {
+            'emp_id_col': self.entry_col_emp.get().strip().upper() or 'A',
+            'emp_name_col': self.entry_col_name.get().strip().upper() or 'B',
+            'scan_col': self.entry_col_scan.get().strip().upper() or 'E',
+            'leave_type_col': self.entry_col_leave.get().strip().upper() or 'G',
+            'checkin_col': self.entry_col_in.get().strip().upper() or 'L',
+            'checkout_col': self.entry_col_out.get().strip().upper() or 'M',
+            'leave_code_col': self.entry_col_code.get().strip().upper() or 'Q',
+            'start_row': self.entry_start_row.get().strip() or '2'
+        }
+
+    def log(self, message):
+        self.txt_log.insert("end", message + "\n")
+        self.txt_log.see("end")
+
+    def clear_log(self):
+        self.txt_log.delete("1.0", "end")
+
+    def browse_main(self):
+        filename = filedialog.askopenfilename(
+            title="เลือกไฟล์ STAFF TIME (Staff Time Report)",
+            filetypes=[("Excel Files", "*.xlsx *.xlsm"), ("All Files", "*.*")]
+        )
+        if filename:
+            self.txt_main.delete(0, "end")
+            self.txt_main.insert(0, filename)
+            self.save_current_settings()
+            self.log(f"📁 เลือกไฟล์ STAFF TIME: {os.path.basename(filename)}")
+
+    def browse_appr(self):
+        filename = filedialog.askopenfilename(
+            title="เลือกการลาที่ได้รับการอนุมัติ (CNTIWEB)",
+            filetypes=[("Excel / CSV Files", "*.xlsx *.xls *.csv"), ("All Files", "*.*")]
+        )
+        if filename:
+            self.txt_appr.delete(0, "end")
+            self.txt_appr.insert(0, filename)
+            self.save_current_settings()
+            self.log(f"🏖️ เลือกการลาที่ได้รับการอนุมัติ: {os.path.basename(filename)}")
+
+    def browse_att(self):
+        filename = filedialog.askopenfilename(
+            title="เลือกใบแจ้งการมาทำงาน (CNTIWEB)",
+            filetypes=[("Excel / CSV Files", "*.xlsx *.xls *.csv"), ("All Files", "*.*")]
+        )
+        if filename:
+            self.txt_att.delete(0, "end")
+            self.txt_att.insert(0, filename)
+            self.save_current_settings()
+            self.log(f"⏰ เลือกใบแจ้งการมาทำงาน: {os.path.basename(filename)}")
+
+    def open_result_folder(self):
+        if self.output_file and os.path.exists(self.output_file):
+            folder = os.path.dirname(self.output_file)
+            try:
+                os.startfile(folder)
+            except Exception:
+                import subprocess
+                subprocess.Popen(f'explorer "{folder}"')
+
+    def open_audit_report(self):
+        if self.report_file and os.path.exists(self.report_file):
+            try:
+                os.startfile(self.report_file)
+            except Exception:
+                import subprocess
+                subprocess.Popen(f'explorer "{self.report_file}"')
+
+    def start_processing_thread(self):
+        if self.is_processing:
+            return
+
+        main_file = self.txt_main.get().strip()
+        appr_file = self.txt_appr.get().strip()
+        att_file = self.txt_att.get().strip()
+        col_cfg = self.get_column_config()
+        self.save_current_settings()
+
+        if not main_file or not os.path.exists(main_file):
+            messagebox.showerror("แจ้งเตือน", "กรุณาเลือกไฟล์ STAFF TIME (.xlsx) ให้ถูกต้องก่อนเริ่มประมวลผล")
+            return
+
+        if (not appr_file or not os.path.exists(appr_file)) and (not att_file or not os.path.exists(att_file)):
+            messagebox.showwarning("แจ้งเตือน", "กรุณาเลือกอย่างน้อย 1 ไฟล์ (การลาที่ได้รับการอนุมัติ หรือ ใบแจ้งการมาทำงาน)")
+            return
+
+        self.is_processing = True
+        self.btn_process.configure(
+            text="⏳  กำลังประมวลผลข้อมูล กรุณารอสักครู่...",
+            fg_color="#94a3b8",
+            state="disabled"
+        )
+        self.btn_preview.configure(state="disabled")
+        self.progress_bar.set(0.0)
+        self.btn_open_folder.configure(state="disabled")
+        self.btn_open_report.configure(state="disabled")
+
+        t = threading.Thread(
+            target=self._run_processing, 
+            args=(main_file, appr_file or None, att_file or None, self.save_mode_var.get(), col_cfg),
+            daemon=True
+        )
+        t.start()
+
+    def _run_processing(self, main_file, appr_file, att_file, save_mode, col_cfg):
+        try:
+            out_file, rep_file, total_up, total_sk = process_all_files(
+                main_filepath=main_file,
+                approval_filepath=appr_file,
+                attendance_filepath=att_file,
+                save_mode=save_mode,
+                col_config=col_cfg,
+                log_callback=lambda msg: self.root.after(0, self.log, msg),
+                progress_callback=lambda p: self.root.after(0, self.progress_bar.set, p / 100.0)
+            )
+            self.output_file = out_file
+            self.report_file = rep_file
+            
+            def on_success():
+                self.btn_process.configure(
+                    text="🚀   เริ่มประมวลผลและอัปเดตข้อมูลอัตโนมัติ",
+                    fg_color=self.color_pineapple,
+                    state="normal"
+                )
+                self.btn_preview.configure(state="normal")
+                self.is_processing = False
+                if out_file:
+                    self.btn_open_folder.configure(state="normal")
+                if rep_file:
+                    self.btn_open_report.configure(state="normal")
+                    
+                rep_msg = f"\n\n📊 ไฟล์รายงานตรวจสอบ (Audit Report):\n{rep_file}" if rep_file else ""
+                messagebox.showinfo(
+                    "ประมวลผลสำเร็จ",
+                    f"อัปเดตข้อมูลเรียบร้อยแล้ว!\n\n"
+                    f"• รายการที่อัปเดตสำเร็จ: {total_up} จุด\n"
+                    f"• รายการที่ข้าม/ติดเงื่อนไข: {total_sk} จุด\n\n"
+                    f"📁 ไฟล์ผลลัพธ์:\n{out_file}"
+                    f"{rep_msg}"
+                )
+            self.root.after(0, on_success)
+            
+        except Exception as e:
+            def on_error(err_msg):
+                self.log(f"\n❌ เกิดข้อผิดพลาด: {err_msg}")
+                self.btn_process.configure(
+                    text="🚀   เริ่มประมวลผลและอัปเดตข้อมูลอัตโนมัติ",
+                    fg_color=self.color_pineapple,
+                    state="normal"
+                )
+                self.btn_preview.configure(state="normal")
+                self.is_processing = False
+                messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถประมวลผลได้:\n{err_msg}")
+            self.root.after(0, on_error, str(e))
+
+
+# -------------------------------------------------------------
+# Main Entry Point
+# -------------------------------------------------------------
+
+def main():
+    root = ctk.CTk()
+    app = ModernCustomTkinterApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
