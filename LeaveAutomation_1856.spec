@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('clock.ico', '.')]
+datas = [('clock.ico', '.'), ('cnt_logo.png', '.')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('customtkinter')

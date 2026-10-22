@@ -182,6 +182,23 @@ def ensure_clock_icon():
         return None
 
 
+CNT_LOGO_B64 = "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"
+
+def ensure_cnt_logo():
+    """โหลดหรือสร้างไฟล์ cnt_logo.png เพื่อใช้เป็นโลโก้บริษัท Christiani & Nielsen"""
+    logo_path = get_resource_path("cnt_logo.png")
+    if os.path.exists(logo_path):
+        return logo_path
+    try:
+        target_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "cnt_logo.png")
+        import base64
+        with open(target_path, "wb") as f:
+            f.write(base64.b64decode(CNT_LOGO_B64))
+        return target_path
+    except Exception:
+        return None
+
+
 def get_default_column_config():
     """คืนค่าคอนฟิกตำแหน่งคอลัมน์มาตรฐาน"""
     return {
@@ -1722,7 +1739,7 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
 class ManualDialog(ctk.CTkToplevel):
     def __init__(self, parent, icon_path=None):
         super().__init__(parent)
-        self.title("คู่มือการใช้งานระบบ CNT STAFF TIME AUTOMATION")
+        self.title("คู่มือการใช้งานระบบ CNT STAFF TIME AUTOMATION - BY WERAWAT THAMRONGDULLAPARK")
         center_window(self, 980, 750, parent)
         self.minsize(860, 640)
         self.font_family = "Tahoma"
@@ -1754,9 +1771,9 @@ class ManualDialog(ctk.CTkToplevel):
 
         lbl_sub = ctk.CTkLabel(
             header,
-            text="ขั้นตอนการทำงาน, กฎคำนวณเวลา, ระบบกันพลาด และการตั้งค่าคอลัมน์สำหรับทุกโครงการ",
-            font=ctk.CTkFont(family=self.font_family, size=13),
-            text_color="#cbd5e1"
+            text="ขั้นตอนการทำงาน, กฎคำนวณเวลา, ระบบกันพลาด และการตั้งค่าคอลัมน์สำหรับทุกโครงการ\nพัฒนาโดย: คุณวีรวัฒน์ ธำรงดุลยภาค (WERAWAT THAMRONGDULLAPARK) | บมจ.คริสเตียนีและนีลเส็น (ไทย)",
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color="#93c5fd"
         )
         lbl_sub.pack(pady=(0, 12))
 
@@ -3299,8 +3316,8 @@ del "%~f0"
 class ModernCustomTkinterApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("CNT STAFF TIME AUTOMATION - บริษัท คริสเตียนีและนีลเส็น (ไทย) จำกัด (มหาชน)")
-        self.root.geometry("1220x920")
+        self.root.title("CNT STAFF TIME AUTOMATION - บริษัท คริสเตียนีและนีลเส็น (ไทย) จำกัด (มหาชน) [BY WERAWAT THAMRONGDULLAPARK]")
+        self.root.geometry("1220x940")
         self.root.minsize(1080, 800)
         
         self.font_family = "Tahoma"
@@ -3308,13 +3325,29 @@ class ModernCustomTkinterApp:
         self.report_file = None
         self.is_processing = False
         
-        # โหลดไอคอนนาฬิกา
+        # โหลดไอคอนประจำโปรแกรม
         self.icon_path = ensure_clock_icon()
         if self.icon_path and os.path.exists(self.icon_path):
             try:
                 self.root.iconbitmap(self.icon_path)
             except Exception:
                 pass
+
+        # โหลดโลโก้บริษัท Christiani & Nielsen
+        self.logo_path = ensure_cnt_logo()
+        self.cnt_logo_img = None
+        if self.logo_path and os.path.exists(self.logo_path):
+            try:
+                from PIL import Image
+                logo_pil = Image.open(self.logo_path)
+                # รักษาอัตราส่วนของโลโก้ (107x78 -> height 40, width 55)
+                self.cnt_logo_img = ctk.CTkImage(
+                    light_image=logo_pil,
+                    dark_image=logo_pil,
+                    size=(55, 40)
+                )
+            except Exception:
+                self.cnt_logo_img = None
                 
         self.github_repo = DEFAULT_GITHUB_REPO
         self.setup_ui()
@@ -3360,13 +3393,39 @@ class ModernCustomTkinterApp:
         header_top.pack(fill="x", padx=24, pady=(12, 6))
         header_top.grid_columnconfigure(0, weight=1)
 
+        brand_box = ctk.CTkFrame(header_top, fg_color="transparent")
+        brand_box.grid(row=0, column=0, sticky="w")
+        
+        if self.cnt_logo_img:
+            logo_badge = ctk.CTkFrame(
+                brand_box,
+                fg_color="#ffffff",
+                corner_radius=8,
+                border_width=1,
+                border_color="#334155"
+            )
+            logo_badge.pack(side="left", padx=(0, 12))
+            lbl_logo = ctk.CTkLabel(logo_badge, text="", image=self.cnt_logo_img)
+            lbl_logo.pack(padx=6, pady=3)
+            
+        brand_text_box = ctk.CTkFrame(brand_box, fg_color="transparent")
+        brand_text_box.pack(side="left")
+        
         lbl_brand = ctk.CTkLabel(
-            header_top,
-            text="CHRISTIANI & NIELSEN (THAI) PCL.  |  STAFF TIME SUITE",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            brand_text_box,
+            text="CHRISTIANI & NIELSEN (THAI) PCL.",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_brand.pack(anchor="w")
+
+        lbl_credit = ctk.CTkLabel(
+            brand_text_box,
+            text="STAFF TIME SUITE  |  BY WERAWAT THAMRONGDULLAPARK",
+            font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"),
             text_color="#93c5fd"
         )
-        lbl_brand.grid(row=0, column=0, sticky="w")
+        lbl_credit.pack(anchor="w", pady=(1, 0))
 
         toolbar_box = ctk.CTkFrame(header_top, fg_color="transparent")
         toolbar_box.grid(row=0, column=1, sticky="e")
@@ -4107,6 +4166,20 @@ class ModernCustomTkinterApp:
             border_color="#cbd5e1"
         )
         self.txt_log.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 18))
+
+        # -------------------------------------------------------------
+        # 3. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Footer Status & Credits)
+        # -------------------------------------------------------------
+        self.root.grid_rowconfigure(2, weight=0)
+        footer_bar = ctk.CTkFrame(self.root, fg_color=self.color_navy, corner_radius=0, height=32)
+        footer_bar.grid(row=2, column=0, sticky="ew")
+        lbl_footer = ctk.CTkLabel(
+            footer_bar,
+            text="CNT STAFF TIME AUTOMATION SUITE 2026  •  BY WERAWAT THAMRONGDULLAPARK  •  CHRISTIANI & NIELSEN (THAI) PCL.",
+            font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"),
+            text_color="#94a3b8"
+        )
+        lbl_footer.pack(pady=5)
 
         self.log("ระบบพร้อมทำงาน... กรุณาเลือกไฟล์ STAFF TIME และข้อมูลที่ต้องการ")
         self.log("คำแนะนำ: สามารถกด 'ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง' เพื่อดูพรีวิวทุกจุดก่อนบันทึกจริงได้เสมอ")
