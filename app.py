@@ -63,7 +63,7 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
 
 
@@ -1733,15 +1733,16 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
 
 
 # -------------------------------------------------------------
-# หน้าต่างโมดอล: คู่มือการใช้งานแบบละเอียด (Manual Dialog)
+# หน้าต่างโมดอล: คู่มือการใช้งานระบบ (User Manual Dialog)
+# ออกแบบให้อ่านง่าย ชัดเจน ตัวหนังสือใหญ่ สบายตาสำหรับผู้ใหญ่ (Senior-Friendly)
 # -------------------------------------------------------------
 
 class ManualDialog(ctk.CTkToplevel):
     def __init__(self, parent, icon_path=None):
         super().__init__(parent)
         self.title("คู่มือการใช้งานระบบ CNT STAFF TIME AUTOMATION - BY WERAWAT THAMRONGDULLAPARK")
-        center_window(self, 980, 750, parent)
-        self.minsize(860, 640)
+        center_window(self, 1080, 800, parent)
+        self.minsize(960, 680)
         self.font_family = "Tahoma"
 
         if icon_path and os.path.exists(icon_path):
@@ -1758,34 +1759,42 @@ class ManualDialog(ctk.CTkToplevel):
         self.focus_force()
 
     def setup_ui(self):
-        header = ctk.CTkFrame(self, fg_color="#0f172a", corner_radius=0, height=80)
+        header = ctk.CTkFrame(self, fg_color="#0f172a", corner_radius=0, height=88)
         header.pack(fill="x")
         
         lbl_t = ctk.CTkLabel(
             header,
-            text="คู่มือการใช้งานระบบ CNT STAFF TIME AUTOMATION (Universal Edition)",
-            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text="📖 คู่มือการใช้งานระบบ CNT STAFF TIME AUTOMATION (Universal Edition)",
+            font=ctk.CTkFont(family=self.font_family, size=21, weight="bold"),
             text_color="#ffffff"
         )
-        lbl_t.pack(pady=(12, 2))
+        lbl_t.pack(pady=(12, 3))
 
         lbl_sub = ctk.CTkLabel(
             header,
-            text="ขั้นตอนการทำงาน, กฎคำนวณเวลา, ระบบกันพลาด และการตั้งค่าคอลัมน์สำหรับทุกโครงการ\nพัฒนาโดย: คุณวีรวัฒน์ ธำรงดุลยภาค (WERAWAT THAMRONGDULLAPARK) | บมจ.คริสเตียนีและนีลเส็น (ไทย)",
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            text="ขั้นตอนการทำงาน • กฎคำนวณเวลาเข้า-ออก • ระบบกันพลาด 5 ชั้น • การตั้งค่าตำแหน่งคอลัมน์\nพัฒนาโดย: คุณวีรวัช ธำรงดุลภาค (WERAWAT THAMRONGDULLAPARK) | บมจ.คริสเตียนีและนีลเส็น (ไทย)",
+            font=ctk.CTkFont(family=self.font_family, size=13),
             text_color="#93c5fd"
         )
         lbl_sub.pack(pady=(0, 12))
 
-        tabview = ctk.CTkTabview(self, corner_radius=10)
-        tabview.pack(fill="both", expand=True, padx=16, pady=(10, 8))
+        tabview = ctk.CTkTabview(self, corner_radius=12)
+        tabview.pack(fill="both", expand=True, padx=18, pady=(10, 8))
+
+        try:
+            tabview._segmented_button.configure(
+                font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+                height=42
+            )
+        except Exception:
+            pass
 
         tabs = [
             ("ขั้นตอนใช้งาน 3 ขั้นตอน", self._build_tab_steps),
             ("กฎเวลาและรหัสวันลา", self._build_tab_rules),
-            ("ระบบกันพลาด", self._build_tab_safeguards),
-            ("ตำแหน่งคอลัมน์", self._build_tab_columns),
-            ("คำถามพบบ่อย", self._build_tab_faq)
+            ("ระบบกันพลาด 5 ชั้น", self._build_tab_safeguards),
+            ("ตำแหน่งคอลัมน์มาตรฐาน", self._build_tab_columns),
+            ("คำถามที่พบบ่อย (FAQ)", self._build_tab_faq)
         ]
 
         for tab_name, builder in tabs:
@@ -1796,123 +1805,190 @@ class ManualDialog(ctk.CTkToplevel):
         btn_close = ctk.CTkButton(
             self,
             text="ปิดหน้าต่างคู่มือ",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
             fg_color="#334155",
             hover_color="#1e293b",
-            height=40,
-            width=120,
+            height=42,
+            width=140,
             corner_radius=8,
             command=self.destroy
         )
         btn_close.pack(pady=(4, 12))
 
+    def _create_card(self, parent, badge_text, badge_color, title_text):
+        """สร้างการ์ดข้อมูลมาตรฐาน ตัวหนังสือใหญ่ อ่านง่าย สบายตา"""
+        card = ctk.CTkFrame(parent, fg_color="#ffffff", corner_radius=10, border_width=1.5, border_color="#cbd5e1")
+        card.pack(fill="x", pady=8, padx=6)
+
+        hdr = ctk.CTkFrame(card, fg_color="transparent")
+        hdr.pack(fill="x", padx=16, pady=(12, 6))
+
+        badge = ctk.CTkLabel(
+            hdr,
+            text=f" {badge_text} ",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color=badge_color,
+            text_color="#ffffff",
+            corner_radius=6
+        )
+        badge.pack(side="left", padx=(0, 10))
+
+        title = ctk.CTkLabel(
+            hdr,
+            text=title_text,
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text_color="#0f172a"
+        )
+        title.pack(side="left")
+
+        return card
+
     def _build_tab_steps(self, parent):
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
-        steps = [
-            ("1. เลือก 'ไฟล์ STAFF TIME (.xlsx)'",
-             "คลิกปุ่ม 'เลือกไฟล์ STAFF TIME...' ในช่องที่ 1 เพื่อเลือกไฟล์หลักประจำงวดของโครงการ เช่น '1856 3-4-5 DD.111026-311026.xlsx'\n• ระบบจะอ่านและค้นหาชีทรายวันทั้งหมดให้โดยอัตโนมัติ (เช่น ชีท 11.10.26 ถึง 31.10.26)"),
-            ("2. เลือกข้อมูลนำเข้า (วันลา หรือ ใบแจ้งเวลา)",
-             "• ช่อง 2.1 (การลาที่ได้รับการอนุมัติ): เลือกไฟล์ 'อนุมัติ.xlsx' ที่ Export มาจากระบบ CNTIWEB\n• ช่อง 2.2 (ใบแจ้งการมาทำงาน): เลือกไฟล์ 'ใบแจ้งการมาทำงาน.xlsx' ที่ Export มาจากระบบ CNTIWEB\n* สามารถเลือกพร้อมกันทั้ง 2 ไฟล์ หรือเลือกทำทีละไฟล์ก็ได้"),
-            ("3. กด 'ตรวจสอบรายการแก้ไข' หรือ 'เริ่มประมวลผลทันที'",
-             "• ปุ่ม 'ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง': ช่วยให้คุณดูทุกจุดที่จะถูกเขียนลงไฟล์ก่อน พร้อมตัวกรองและค้นหา\n• ปุ่ม 'เริ่มประมวลผลและบันทึกข้อมูลลงไฟล์ STAFF TIME ทันที': ระบบจะทำการอัปเดตและสร้างไฟล์ผลลัพธ์ใหม่ พร้อมรายงาน Audit Report .xlsx ให้ทันที")
-        ]
+        # ขั้นตอนที่ 1
+        c1 = self._create_card(scroll, "ขั้นตอนที่ 1", "#1d4ed8", "เลือก 'ไฟล์ STAFF TIME (.xlsx)' ประจำงวด")
+        desc1 = (
+            "• คลิกปุ่ม 'เลือกไฟล์ STAFF TIME...' หรือสามารถ ลากไฟล์มาวาง (Drag & Drop) ลงในกรอบที่ 1 ได้ทันที\n"
+            "• เลือกไฟล์หลักของโครงการประจำงวด เช่น '1856 3-4-5 DD.111026-311026.xlsx'\n"
+            "• ระบบจะตรวจสอบโครงสร้างและค้นหาชีทรายวันทั้งหมดให้โดยอัตโนมัติ (เช่น ชีท 11.10.26 ถึง 31.10.26)"
+        )
+        lbl1 = ctk.CTkLabel(c1, text=desc1, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+        lbl1.pack(anchor="w", padx=18, pady=(0, 14))
 
-        for title, desc in steps:
-            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
-            card.pack(fill="x", pady=6, padx=4)
-            lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#1a73e8")
-            lbl_title.pack(anchor="w", padx=14, pady=(12, 4))
-            lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
-            lbl_desc.pack(anchor="w", padx=14, pady=(0, 12))
+        # ขั้นตอนที่ 2
+        c2 = self._create_card(scroll, "ขั้นตอนที่ 2", "#4f46e5", "เลือกไฟล์ข้อมูลนำเข้า (วันลา หรือ ใบแจ้งเวลา)")
+        desc2 = (
+            "• ช่อง 2.1 (การลาที่ได้รับการอนุมัติ): เลือกไฟล์ 'อนุมัติ.xlsx' ที่ Export ออกมาจากระบบ CNTIWEB\n"
+            "• ช่อง 2.2 (ใบแจ้งการมาทำงาน): เลือกไฟล์ 'ใบแจ้งการมาทำงาน.xlsx' ที่ Export จากระบบ CNTIWEB\n"
+            "• 💡 สะดวกยิ่งขึ้น: ท่านสามารถลากไฟล์มาวาง (Drag & Drop) ได้ทั้งสองช่อง หรือลากทั้ง 2 ไฟล์พร้อมกันลงโปรแกรมได้ทันที\n"
+            "• สามารถเลือกทำพร้อมกันทั้ง 2 ไฟล์ หรือทำทีละไฟล์ก็ได้ตามต้องการ"
+        )
+        lbl2 = ctk.CTkLabel(c2, text=desc2, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+        lbl2.pack(anchor="w", padx=18, pady=(0, 14))
+
+        # ขั้นตอนที่ 3
+        c3 = self._create_card(scroll, "ขั้นตอนที่ 3", "#059669", "ตรวจสอบรายการแก้ไข หรือ เริ่มประมวลผลทันที")
+        desc3 = (
+            "• ปุ่ม '🔍 ตรวจสอบรายการแก้ไขก่อนบันทึกจริง': แนะนำให้คลิกก่อน เพื่อเปิดดูทุกจุดที่โปรแกรมจะทำการบันทึก มีตัวกรองแยกประเภทและช่องค้นหา\n"
+            "• ปุ่ม '⚡ เริ่มประมวลผลและบันทึกข้อมูล': บันทึกข้อมูลและสร้างไฟล์ใหม่ทันที พร้อมออกรายงานผล Audit Report .xlsx ให้ครบถ้วน\n"
+            "• ปุ่ม '📊 วิเคราะห์เวลาทำงานผิดปกติ': ตรวจจับพนักงานที่ลืมสแกนนิ้ว สแกนรอบเดียว หรือยื่นใบแจ้งเวลาซ้ำ พร้อมส่งออก Excel สรุปผลได้ทันที"
+        )
+        lbl3 = ctk.CTkLabel(c3, text=desc3, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+        lbl3.pack(anchor="w", padx=18, pady=(0, 14))
 
     def _build_tab_rules(self, parent):
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
-        sections = [
-            ("⏰ กฎเวลาการเข้า-ออกงาน (Attendance Rules)",
-             "• เข้างานช่วงเช้า: หากแจ้งเวลาในช่วง 04:00 - 11:30 ระบบจะบันทึกช่อง L (In) เป็น 07:30\n• เลิกงานช่วงเย็น: ระบบเริ่มต้นพิจารณาที่เวลา 16:30 เป็นต้นไป และปัดเศษนาทีลงเป็นช่วงละ 30 นาที (:00 หรือ :30) ลงช่อง M (Out)\n  - 16:55 ➔ ปัดลงเป็น 16:30\n  - 17:00 ➔ 17:00\n  - 17:10 ➔ ปัดลงเป็น 17:00\n  - 17:33 ➔ ปัดลงเป็น 17:30\n  - 18:05 ➔ ปัดลงเป็น 18:00\n  - 18:31 ➔ ปัดลงเป็น 18:30\n• เติมหมายเหตุ: ระบบจะเติมคำว่า 'มีใบแจ้งฯ' ลงในช่องประเภทลา (ช่อง G) ให้โดยอัตโนมัติ"),
-            ("กฎรหัสย่อวันลา (ช่อง Q) และการตัดคำภาษาไทย",
-             "• ตัดชื่อภาษาไทย: ระบบตัดเฉพาะชื่อภาษาไทยเอาไว้ (เช่น 'ลาป่วย - Sick Leave' ➔ เหลือเพียง 'ลาป่วย')\n• รหัสย่อช่อง Q:\n  - ลาพักร้อน ➔ พ\n  - ลาป่วย ➔ ป\n  - ลากิจ, ลาไม่ได้รับค่าจ้าง, หรืออื่นๆ ➔ อ\n• ลาไม่เต็มวัน: ระบบจะระบุจำนวนชั่วโมง เช่น 'ลาป่วย 3 ชม.' และปรับเวลาเข้าหรือออกให้สอดคล้องกัน")
-        ]
+        # กฎเวลาเข้า-ออก
+        c1 = self._create_card(scroll, "กฎเวลาเข้า-ออก", "#d97706", "⏰ กฎเวลาการเข้า-ออกงาน (Attendance Rules)")
+        desc1 = (
+            "1. เข้างานช่วงเช้า (Check-in ลงช่อง L):\n"
+            "   • หากมีใบแจ้งเวลาในช่วง 04:00 - 11:30 น. ➔ บันทึกเวลาเข้างานมาตรฐานเป็น 07:30 อัตโนมัติ\n\n"
+            "2. เลิกงานช่วงเย็น (Check-out ลงช่อง M):\n"
+            "   • ระบบพิจารณาเวลาตั้งแต่ 16:30 เป็นต้นไป โดยปัดเศษนาทีลงเป็นช่วงละ 30 นาที (:00 หรือ :30) เสมอ\n"
+            "     - 16:55  ➔  ปัดลงเป็น  16:30\n"
+            "     - 17:00  ➔  คงเดิมที่   17:00\n"
+            "     - 17:10  ➔  ปัดลงเป็น  17:00\n"
+            "     - 17:33  ➔  ปัดลงเป็น  17:30\n"
+            "     - 18:05  ➔  ปัดลงเป็น  18:00\n"
+            "     - 18:31  ➔  ปัดลงเป็น  18:30\n\n"
+            "3. เติมหมายเหตุอัตโนมัติ:\n"
+            "   • ระบบจะเติมคำว่า 'มีใบแจ้งฯ' ลงในช่องประเภทลา (ช่อง G) ให้โดยอัตโนมัติ เพื่อให้ผู้ดูแลตรวจสอบได้ง่าย"
+        )
+        lbl1 = ctk.CTkLabel(c1, text=desc1, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+        lbl1.pack(anchor="w", padx=18, pady=(0, 14))
 
-        for title, desc in sections:
-            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
-            card.pack(fill="x", pady=6, padx=4)
-            lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#d97706")
-            lbl_title.pack(anchor="w", padx=14, pady=(12, 4))
-            lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
-            lbl_desc.pack(anchor="w", padx=14, pady=(0, 12))
+        # กฎรหัสย่อวันลา
+        c2 = self._create_card(scroll, "กฎรหัสวันลา", "#7c3aed", "📋 กฎรหัสย่อวันลา (ช่อง Q) และการตัดคำภาษาไทย")
+        desc2 = (
+            "1. การตัดคำภาษาไทย:\n"
+            "   • ระบบจะตัดข้อความภาษาอังกฤษออก เหลือเพียงชื่อภาษาไทยที่กระชับ เช่น 'ลาป่วย - Sick Leave' ➔ เหลือเพียง 'ลาป่วย'\n\n"
+            "2. รหัสตัวย่อลงช่อง Q:\n"
+            "   • พ  =  ลาพักร้อน (Annual Leave)\n"
+            "   • ป  =  ลาป่วย (Sick Leave)\n"
+            "   • อ  =  ลากิจ, ลาไม่ได้รับค่าจ้าง, หรือการลาประเภทอื่นๆ ทั้งหมด\n\n"
+            "3. กรณีการลาไม่เต็มวัน (ระบุชั่วโมง):\n"
+            "   • ระบบจะระบุจำนวนชั่วโมงชัดเจน เช่น 'ลาป่วย 3 ชม.' และปรับเวลาเข้า-ออกงานให้สอดคล้องกับชั่วโมงที่ลาโดยอัตโนมัติ"
+        )
+        lbl2 = ctk.CTkLabel(c2, text=desc2, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+        lbl2.pack(anchor="w", padx=18, pady=(0, 14))
 
     def _build_tab_safeguards(self, parent):
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
         safeguards = [
-            ("ชั้นที่ 1: ตรวจสอบสแกนนิ้วดิบ (Biometric Scan Check)",
-             "ระบบตรวจช่องสแกนนิ้วดิบ (ช่อง E) หากพบว่าพนักงานมีการสแกนนิ้วครบทั้งเข้างาน (ตั้งแต่ 04:00 น.) และออกงาน (เย็น) แล้ว ระบบจะ 'ข้าม' ข้อมูลวันลาหรือใบแจ้งเวลาในวันนั้นทันที เพื่อป้องกันกรณีพนักงานจำวันผิด กรอกลาผิดวัน หรือแจ้งลืมสแกนซ้ำซ้อน"),
-            ("ชั้นที่ 2: ดับเบิลเช็คชื่อพนักงาน (Double-Check Name Similarity)",
-             "ระบบเปรียบเทียบชื่อพนักงานในไฟล์นำเข้ากับชื่อที่ปรากฏในชีท STAFF TIME หากรหัสพนักงานตรงแต่ชื่อไม่ตรงกัน (เช่น คีย์รหัสผิดในไฟล์หลัก) ระบบจะข้ามเพื่อความปลอดภัย พร้อมแจ้งเตือนใน Log และ Audit Report ทันที"),
-            ("ชั้นที่ 3: ตรวจจับข้อมูลขัดแย้ง (Conflict Detection)",
-             "หากพนักงานคนเดียวกันในวันเดียวกัน มีทั้ง 'วันลาเต็มวัน' และ 'ใบแจ้งการมาทำงาน' ชนกัน ระบบจะยึด 'วันลาที่ได้รับการอนุมัติ' เป็นหลัก และข้ามใบแจ้งเวลา พร้อมแจ้งเตือน"),
-            ("ชั้นที่ 4: ตรวจจับสแกนเดี่ยวซ้ำซ้อน (Redundant Single Scan)",
-             "หากพนักงานมีสแกนเช้าอยู่แล้ว แต่ไปยื่นใบแจ้งเวลาเข้างาน ระบบจะข้ามให้ เพราะมีเวลาสแกนจริงอยู่แล้ว เช่นเดียวกันหากมีสแกนเย็น >= 16:30 อยู่แล้ว จะข้ามใบแจ้งออกงาน"),
-            ("ชั้นที่ 5: รายงานผลการตรวจสอบ Audit & Discrepancy Report (.xlsx)",
-             "ทุกครั้งที่ประมวลผลเสร็จสิ้น ระบบจะสร้างไฟล์ 'Audit_Report_วันที่.xlsx' บันทึกรายการทุกจุด ทั้งจุดที่อัปเดตสำเร็จ และจุดที่ติดเงื่อนไขพร้อมระบุเหตุผลอย่างละเอียด 100%")
+            ("ชั้นที่ 1", "#059669", "🛡️ ชั้นที่ 1: ตรวจสอบสแกนนิ้วดิบ (Biometric Scan Protection)",
+             "ระบบตรวจช่องสแกนนิ้วดิบ (ช่อง E) หากพบว่าพนักงานมีการสแกนนิ้วครบทั้งเช้า (ตั้งแต่ 04:00 น.) และเลิกงาน (เย็น) แล้ว ระบบจะ 'ข้าม' ข้อมูลวันลาหรือใบแจ้งเวลาในวันนั้นทันที เพื่อป้องกันกรณีพนักงานจำวันผิด กรอกลาผิดวัน หรือแจ้งเวลาซ้ำซ้อน"),
+            ("ชั้นที่ 2", "#059669", "🛡️ ชั้นที่ 2: ดับเบิลเช็คชื่อพนักงาน (Double-Check Name Similarity)",
+             "ระบบเปรียบเทียบชื่อพนักงานในไฟล์นำเข้ากับชื่อที่ปรากฏในชีท STAFF TIME หากรหัสพนักงานตรงกันแต่ชื่อไม่ตรง (เช่น มีการคีย์รหัสผิดในไฟล์หลัก) ระบบจะข้ามเพื่อความปลอดภัย พร้อมแจ้งเตือนใน Log และ Audit Report ทันที"),
+            ("ชั้นที่ 3", "#059669", "🛡️ ชั้นที่ 3: ตรวจจับข้อมูลขัดแย้ง (Conflict Detection)",
+             "หากพนักงานคนเดียวกันในวันเดียวกัน มีทั้ง 'วันลาเต็มวัน' และ 'ใบแจ้งการมาทำงาน' ชนกัน ระบบจะยึด 'วันลาที่ได้รับการอนุมัติ' เป็นหลัก และข้ามใบแจ้งเวลา พร้อมแจ้งเตือนในรายงาน"),
+            ("ชั้นที่ 4", "#059669", "🛡️ ชั้นที่ 4: ตรวจจับสแกนเดี่ยวซ้ำซ้อน (Redundant Single Scan)",
+             "หากพนักงานมีสแกนเช้าจริงอยู่แล้ว แต่ไปยื่นใบแจ้งเวลาเข้างาน ระบบจะข้ามให้ เพราะมีเวลาสแกนจริงอยู่แล้ว เช่นเดียวกันหากมีสแกนเย็น >= 16:30 อยู่แล้ว จะข้ามใบแจ้งเวลาเลิกงาน"),
+            ("ชั้นที่ 5", "#059669", "🛡️ ชั้นที่ 5: รายงานผลการตรวจสอบ Audit & Discrepancy Report (.xlsx)",
+             "ทุกครั้งที่ประมวลผลเสร็จสิ้น ระบบจะสร้างไฟล์ 'Audit_Report_วันที่.xlsx' บันทึกรายละเอียดครบ 100% ทุกบรรทัด ทั้งรายการที่อัปเดตสำเร็จ และรายการที่ติดเงื่อนไขพร้อมระบุเหตุผลอย่างชัดเจน")
         ]
 
-        for title, desc in safeguards:
-            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
-            card.pack(fill="x", pady=6, padx=4)
-            lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), text_color="#15803d")
-            lbl_title.pack(anchor="w", padx=14, pady=(12, 4))
-            lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
-            lbl_desc.pack(anchor="w", padx=14, pady=(0, 12))
+        for badge, color, title, desc in safeguards:
+            c = self._create_card(scroll, badge, color, title)
+            lbl = ctk.CTkLabel(c, text=desc, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+            lbl.pack(anchor="w", padx=18, pady=(0, 14))
 
     def _build_tab_columns(self, parent):
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
-        card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
-        card.pack(fill="x", pady=6, padx=4)
-
+        c = self._create_card(scroll, "ตั้งค่าคอลัมน์", "#0284c7", "📌 ตำแหน่งคอลัมน์มาตรฐาน (รองรับปรับเปลี่ยนได้ทุกโครงการ)")
         desc = (
-            "โปรแกรมรองรับการปรับแต่งช่องคอลัมน์เป้าหมายในหมวดที่ 3 ของหน้าต่างหลัก เผื่อกรณีโครงการอื่นใช้เทมเพลตต่างกัน:\n\n"
-            "• ช่อง A (รหัสพนักงาน): รหัสของพนักงานประจำแถวนั้น\n"
-            "• ช่อง B (ชื่อพนักงาน): ใช้ทำ Double-Check ตรวจสอบชื่อตัวกับไฟล์นำเข้า\n"
-            "• ช่อง E (สแกนดิบ): เวลาสแกนนิ้วดิบ (Time) เช่น '07:28 17:02'\n"
-            "• ช่อง G (ประเภทลา): ลงชื่อวันลาภาษาไทย หรือเติม 'มีใบแจ้งฯ'\n"
-            "• ช่อง L (เวลาเข้า): เวลาเข้างาน Check-in (ลง 07:30)\n"
-            "• ช่อง M (เวลาออก): เวลาเลิกงาน Check-out (ลงเวลาปัดเศษลง 30 นาที)\n"
-            "• ช่อง Q (รหัสย่อ): ลงรหัสตัวย่อ พ / ป / อ\n"
-            "• เริ่มแถวที่ 2: แถวแรกที่เริ่มมีข้อมูลพนักงาน (ข้ามหัวตารางแถวที่ 1)\n\n"
-            "หากต้องการกลับไปใช้ค่ามาตรฐาน สามารถกดปุ่ม 'คืนค่ามาตรฐาน' ได้ตลอดเวลา"
+            "โปรแกรมรองรับการปรับแต่งตำแหน่งคอลัมน์เป้าหมายใน 'ข้อ 3. ตั้งค่าตำแหน่งคอลัมน์' บนหน้าต่างหลัก\n"
+            "เผื่อกรณีโครงการอื่นของ CNT ใช้เทมเพลตที่คอลัมน์แตกต่างกัน โดยระบบจะจดจำค่าไว้ถาวรตลอดไป:\n\n"
+            "• คอลัมน์ A (รหัสพนักงาน) : รหัสพนักงานประจำแถวนั้น\n"
+            "• คอลัมน์ B (ชื่อพนักงาน) : ใช้ทำ Double-Check ตรวจสอบความถูกต้องของชื่อตัวกับไฟล์นำเข้า\n"
+            "• คอลัมน์ E (สแกนดิบ) : เวลาสแกนนิ้วดิบ (Time) เช่น '07:28 17:02'\n"
+            "• คอลัมน์ G (ประเภทลา) : ลงชื่อวันลาภาษาไทย หรือเติมข้อความ 'มีใบแจ้งฯ'\n"
+            "• คอลัมน์ L (เวลาเข้า) : เวลาเข้างาน Check-in (ลง 07:30)\n"
+            "• คอลัมน์ M (เวลาออก) : เวลาเลิกงาน Check-out (ลงเวลาปัดเศษลง 30 นาที)\n"
+            "• คอลัมน์ Q (รหัสย่อ) : ลงรหัสตัวย่อ พ / ป / อ\n"
+            "• เริ่มแถวที่ 2 : แถวแรกที่เริ่มมีข้อมูลพนักงาน (ข้ามหัวตารางแถวที่ 1)\n\n"
+            "💡 หากต้องการกลับไปใช้ค่าเริ่มต้น สามารถคลิกปุ่ม 'คืนค่ามาตรฐาน' บนหน้าต่างหลักได้ตลอดเวลา"
         )
-        lbl_desc = ctk.CTkLabel(card, text=desc, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#334155", justify="left")
-        lbl_desc.pack(anchor="w", padx=16, pady=16)
+        lbl = ctk.CTkLabel(c, text=desc, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+        lbl.pack(anchor="w", padx=18, pady=(0, 16))
 
     def _build_tab_faq(self, parent):
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
         faqs = [
-            ("Q: ทำไมข้อมูลของพนักงานบางคนถึงไม่ถูกนำไปกรอกลงในชีท?",
-             "ตอบ: มีสาเหตุที่เป็นไปได้ดังนี้:\n1. พนักงานมีสแกนนิ้วครบทั้งเข้าและออกแล้ว (ระบบกันพลาดป้องกันกรอกลาผิดวัน)\n2. มีข้อมูลเดิมหรือเวลาเดิมตรงกับเป้าหมายอยู่แล้วในช่องนั้น (ระบบข้ามเพื่อไม่ให้เขียนทับซ้ำซ้อน)\n3. ชื่อพนักงานในชีท STAFF TIME ไม่ตรงกับไฟล์นำเข้า (ระบบข้ามเพื่อป้องกันคีย์รหัสผิด)\n4. วันที่ในไฟล์นำเข้าไม่ได้อยู่ในช่วงงวดของไฟล์ STAFF TIME\n* ท่านสามารถเปิดดู 'Audit Report' หรือกดปุ่ม 'ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง' เพื่อดูเหตุผลรายคนได้ทันที"),
-            ("Q: ไฟล์ผลลัพธ์ถูกบันทึกไว้ที่ไหน?",
-             "ตอบ: ถูกบันทึกไว้ในโฟลเดอร์เดียวกับ 'ไฟล์ STAFF TIME' โดยมีชื่อลงท้ายด้วย _updated_วันที่เวลา ท่านสามารถกดปุ่ม 'เปิดโฟลเดอร์ผลลัพธ์' บนหน้าจอหลักเพื่อเปิดดูได้ทันที"),
-            ("Q: หากต้องการดูข้อมูลของพนักงานรายคนแบบเจาะลึกทำอย่างไร?",
-             "ตอบ: กดปุ่ม 'ตรวจสอบรายคน' บนแถบด้านบนของหน้าต่างหลัก แล้วพิมพ์รหัสหรือชื่อพนักงานเพื่อค้นหาได้ทันที")
+            ("คำถามที่ 1", "#0284c7", "Q: ทำไมข้อมูลของพนักงานบางคนถึงไม่ถูกนำไปกรอกลงในชีท?",
+             "ตอบ: มีสาเหตุที่เป็นไปได้ตามระบบกันพลาด ดังนี้ครับ:\n"
+             "1. พนักงานมีสแกนนิ้วครบทั้งเช้าและเย็นแล้ว (ระบบป้องกันการยื่นลาผิดวัน)\n"
+             "2. มีข้อมูลเดิมหรือเวลาเดิมตรงกับเป้าหมายอยู่แล้วในช่องนั้น (ระบบข้ามเพื่อไม่เขียนทับซ้ำ)\n"
+             "3. ชื่อพนักงานในชีท STAFF TIME ไม่ตรงกับไฟล์นำเข้า (ระบบข้ามเพื่อป้องกันคีย์รหัสผิด)\n"
+             "4. วันที่ในไฟล์นำเข้าไม่ได้อยู่ในช่วงงวดของไฟล์ STAFF TIME\n\n"
+             "💡 ท่านสามารถกดปุ่ม 'ตรวจสอบรายการแก้ไข' หรือเปิดไฟล์ 'Audit Report' เพื่อดูเหตุผลรายคนได้ทันที"),
+
+            ("คำถามที่ 2", "#0284c7", "Q: ไฟล์ผลลัพธ์ถูกบันทึกไว้ที่ไหน และไฟล์ต้นฉบับจะเสียหายหรือไม่?",
+             "ตอบ: ไฟล์ต้นฉบับจะไม่ถูกแก้ไขหรือทับเลยครับ!\n"
+             "โปรแกรมจะสร้างไฟล์ใหม่ชื่อลงท้ายด้วย '_updated_วันเวลา.xlsx' ไว้ในโฟลเดอร์เดียวกับไฟล์ STAFF TIME เดิมเสมอ\n"
+             "ท่านสามารถคลิกปุ่ม 'เปิดโฟลเดอร์ผลลัพธ์' บนหน้าต่างหลักเพื่อเปิดโฟลเดอร์ดูไฟล์ได้ทันที"),
+
+            ("คำถามที่ 3", "#0284c7", "Q: หากต้องการดูข้อมูลของพนักงานรายคนแบบเจาะลึกทำอย่างไร?",
+             "ตอบ: คลิกปุ่ม 'ตรวจสอบรายคน' บนแถบด้านบนของหน้าต่างหลัก แล้วพิมพ์รหัสหรือชื่อพนักงานเพื่อค้นหาประวัติการทำงานได้ทันที"),
+
+            ("คำถามที่ 4", "#0284c7", "Q: ต้องการส่งโปรแกรมให้เพื่อนร่วมงานที่โครงการอื่นใช้งาน ต้องทำอย่างไร?",
+             "ตอบ: สามารถส่งไฟล์ 'LeaveAutomation_1856.exe' หรือ 'LeaveAutomation_1856.zip' ให้เพื่อนร่วมงานได้ทันที\n"
+             "โปรแกรมเป็นแบบ Standalone สามารถเปิดใช้งานได้ทันทีโดยไม่ต้องติดตั้ง Python หรือโปรแกรมเสริมใดๆ ทั้งสิ้น")
         ]
 
-        for q, a in faqs:
-            card = ctk.CTkFrame(scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
-            card.pack(fill="x", pady=6, padx=4)
-            lbl_q = ctk.CTkLabel(card, text=q, font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"), text_color="#1e293b")
-            lbl_q.pack(anchor="w", padx=14, pady=(12, 4))
-            lbl_a = ctk.CTkLabel(card, text=a, font=ctk.CTkFont(family=self.font_family, size=13), text_color="#475569", justify="left")
-            lbl_a.pack(anchor="w", padx=14, pady=(0, 12))
+        for badge, color, q, a in faqs:
+            c = self._create_card(scroll, badge, color, q)
+            lbl = ctk.CTkLabel(c, text=a, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
+            lbl.pack(anchor="w", padx=18, pady=(0, 14))
 
 
 # -------------------------------------------------------------
