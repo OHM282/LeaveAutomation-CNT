@@ -2678,6 +2678,446 @@ class AnalyticsDialog(ctk.CTkToplevel):
 
 
 # -------------------------------------------------------------
+# -------------------------------------------------------------
+# ระบบวิเคราะห์เวลาทำงานและสแกนผิดปกติอัจฉริยะ (Smart Anomaly Analyzer)
+# -------------------------------------------------------------
+
+def analyze_attendance_anomalies(main_filepath, col_config=None):
+    """
+    วิเคราะห์ข้อมูลสแกนดิบและเวลาทำงานในทุกชีท เพื่อหาความผิดปกติ:
+    1. missing_punch: สแกนขาเดียว (มีเฉพาะเข้า หรือมีเฉพาะออก)
+    2. unrecorded_absence: ขาดงานโดยไม่แจ้ง (วันทำงานปกติ ไม่มีสแกน และไม่มีข้อมูลการลา)
+    """
+    if not main_filepath or not os.path.exists(main_filepath):
+        return {'success': False, 'error': 'ไม่พบไฟล์รายงาน STAFF TIME'}
+
+    cfg = col_config or get_default_column_config()
+    try:
+        wb = openpyxl.load_workbook(main_filepath, data_only=True)
+    except Exception as e:
+        return {'success': False, 'error': f'ไม่สามารถเปิดไฟล์ Excel ได้: {str(e)}'}
+
+    sheets = map_workbook_sheets(wb)
+    if not sheets:
+        return {'success': False, 'error': 'ไม่พบชีทวันที่ประจำงวดในไฟล์ STAFF TIME'}
+
+    anomalies = []
+    counts = {
+        'total': 0,
+        'missing_punch': 0,
+        'unrecorded_absence': 0,
+        'sheets_checked': len(sheets)
+    }
+
+    start_row = int(cfg.get('start_row', 2))
+    emp_id_col = cfg.get('emp_id_col', 'A').upper().strip() or 'A'
+    emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
+    scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
+    leave_type_col = cfg.get('leave_type_col', 'G').upper().strip() or 'G'
+    leave_code_col = cfg.get('leave_code_col', 'Q').upper().strip() or 'Q'
+
+    for dt, sheet_name in sheets.items():
+        ws = wb[sheet_name]
+        is_holiday, h_name = is_company_holiday(dt, ws)
+        is_sunday = (dt.weekday() == 6)
+
+        for r in range(start_row, ws.max_row + 1):
+            emp_id = str(ws[f"{emp_id_col}{r}"].value or '').strip()
+            emp_name = str(ws[f"{emp_name_col}{r}"].value or '').strip()
+            if not emp_id or not emp_name:
+                continue
+
+            scan_val = ws[f"{scan_col}{r}"].value
+            h_in, h_out, f_in, f_out, raw_val = check_fingerprint_scans(scan_val)
+            leave_val = str(ws[f"{leave_type_col}{r}"].value or '').strip()
+            code_val = str(ws[f"{leave_code_col}{r}"].value or '').strip()
+
+            # 1. สแกนขาเดียว (Missing Punch)
+            if (h_in and not h_out) or (not h_in and h_out):
+                missing_side = 'ลืมสแกนออก (มีเฉพาะเวลาเข้า)' if h_in else 'ลืมสแกนเข้า (มีเฉพาะเวลาออก)'
+                action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาออก' if h_in else 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาเข้า'
+                anomalies.append({
+                    'category': 'missing_punch',
+                    'category_desc': 'ลืมสแกน (ขาเดียว)',
+                    'sheet': sheet_name,
+                    'date': dt.strftime('%d/%m/%Y'),
+                    'emp_id': emp_id,
+                    'emp_name': emp_name,
+                    'scan_raw': str(raw_val or '-'),
+                    'detail': missing_side,
+                    'action_needed': action
+                })
+                counts['missing_punch'] += 1
+                counts['total'] += 1
+
+            # 2. ไม่พบสแกนและไม่ลา (Unrecorded Absence)
+            elif not h_in and not h_out and not leave_val and not code_val and not is_holiday and not is_sunday:
+                anomalies.append({
+                    'category': 'unrecorded_absence',
+                    'category_desc': 'ไม่พบสแกนและไม่ลา',
+                    'sheet': sheet_name,
+                    'date': dt.strftime('%d/%m/%Y'),
+                    'emp_id': emp_id,
+                    'emp_name': emp_name,
+                    'scan_raw': '-',
+                    'detail': 'ไม่พบสแกนนิ้วในระบบ และไม่มีบันทึกข้อมูลการลาในตาราง',
+                    'action_needed': 'ตรวจสอบว่าพนักงานขาดงาน หรือยังไม่ได้บันทึกใบลาที่ได้รับอนุมัติ'
+                })
+                counts['unrecorded_absence'] += 1
+                counts['total'] += 1
+
+    return {
+        'success': True,
+        'counts': counts,
+        'anomalies': anomalies
+    }
+
+
+class AnomalyDialog(ctk.CTkToplevel):
+    """หน้าต่างแสดงผลการวิเคราะห์เวลาทำงานและสแกนผิดปกติอัจฉริยะ"""
+    def __init__(self, parent, main_file, col_config=None, icon_path=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.main_file = main_file
+        self.col_config = col_config
+        self.font_family = "Tahoma"
+
+        self.title("ระบบวิเคราะห์เวลาทำงานและสแกนผิดปกติอัจฉริยะ (Smart Attendance Anomaly Analyzer)")
+        center_window(self, 1020, 740, parent)
+        self.minsize(900, 620)
+
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        self.active_filter = "all"
+        self.search_query = ""
+        self.anomalies_data = []
+
+        self.setup_ui()
+        self.load_data()
+
+        self.grab_set()
+        self.focus_force()
+
+    def setup_ui(self):
+        # 1. Header
+        header = ctk.CTkFrame(self, fg_color="#0f172a", corner_radius=0, height=80)
+        header.pack(fill="x")
+
+        lbl_t = ctk.CTkLabel(
+            header,
+            text="ระบบวิเคราะห์เวลาทำงานและสแกนผิดปกติอัจฉริยะ (Smart Anomaly Analyzer)",
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            text_color="#ffffff"
+        )
+        lbl_t.pack(pady=(12, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            header,
+            text="ตรวจจับสแกนขาเดียว, ลืมสแกนเข้า/ออก, และไม่พบการลงเวลาในวันทำงาน สำหรับทุกโครงการของ CNT",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#cbd5e1"
+        )
+        lbl_sub.pack(pady=(0, 12))
+
+        # 2. Summary KPI Cards
+        self.kpi_frame = ctk.CTkFrame(self, fg_color="#f8fafc", corner_radius=0)
+        self.kpi_frame.pack(fill="x", padx=16, pady=(12, 6))
+        for i in range(4):
+            self.kpi_frame.grid_columnconfigure(i, weight=1)
+
+        self.lbl_kpi_total = self._create_kpi_card(self.kpi_frame, 0, "รายการผิดปกติทั้งหมด", "-", "#b45309", "#fffbeb")
+        self.lbl_kpi_punch = self._create_kpi_card(self.kpi_frame, 1, "ลืมสแกน (ขาเดียว)", "-", "#b91c1c", "#fef2f2")
+        self.lbl_kpi_absent = self._create_kpi_card(self.kpi_frame, 2, "ไม่พบสแกนและไม่ลา", "-", "#c2410c", "#fff7ed")
+        self.lbl_kpi_sheets = self._create_kpi_card(self.kpi_frame, 3, "จำนวนวันที่ตรวจพบ", "-", "#0369a1", "#f0f9ff")
+
+        # 3. Filter & Controls Bar
+        ctrl_frame = ctk.CTkFrame(self, fg_color="transparent")
+        ctrl_frame.pack(fill="x", padx=16, pady=8)
+        ctrl_frame.grid_columnconfigure(1, weight=1)
+
+        filter_box = ctk.CTkFrame(ctrl_frame, fg_color="transparent")
+        filter_box.grid(row=0, column=0, sticky="w")
+
+        self.btn_f_all = ctk.CTkButton(
+            filter_box, text="ทั้งหมด", width=80, height=34, corner_radius=8,
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#1d4ed8", hover_color="#1e40af", command=lambda: self.set_filter("all")
+        )
+        self.btn_f_all.pack(side="left", padx=(0, 4))
+
+        self.btn_f_punch = ctk.CTkButton(
+            filter_box, text="ลืมสแกน (ขาเดียว)", width=125, height=34, corner_radius=8,
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", command=lambda: self.set_filter("missing_punch")
+        )
+        self.btn_f_punch.pack(side="left", padx=4)
+
+        self.btn_f_absent = ctk.CTkButton(
+            filter_box, text="ไม่พบสแกน/ไม่ลา", width=125, height=34, corner_radius=8,
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", command=lambda: self.set_filter("unrecorded_absence")
+        )
+        self.btn_f_absent.pack(side="left", padx=4)
+
+        # Search box
+        search_box = ctk.CTkFrame(ctrl_frame, fg_color="transparent")
+        search_box.grid(row=0, column=1, sticky="ew", padx=10)
+        search_box.grid_columnconfigure(0, weight=1)
+
+        self.txt_search = ctk.CTkEntry(
+            search_box,
+            placeholder_text="พิมพ์รหัสพนักงาน หรือชื่อพนักงานเพื่อกรอง...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=36,
+            corner_radius=8
+        )
+        self.txt_search.grid(row=0, column=0, sticky="ew")
+        self.txt_search.bind("<KeyRelease>", lambda e: self.on_search_changed())
+
+        # Action Button: Export to Excel
+        btn_export = ctk.CTkButton(
+            ctrl_frame,
+            text="ส่งออกรายงาน Excel (.xlsx)",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#059669",
+            hover_color="#047857",
+            height=36,
+            corner_radius=8,
+            command=self.export_to_excel
+        )
+        btn_export.grid(row=0, column=2, sticky="e")
+
+        # 4. Results List Container
+        self.list_scroll = ctk.CTkScrollableFrame(self, fg_color="#f1f5f9", corner_radius=10)
+        self.list_scroll.pack(fill="both", expand=True, padx=16, pady=(4, 10))
+        self.list_scroll.grid_columnconfigure(0, weight=1)
+
+        # 5. Bottom Status Bar
+        bot_bar = ctk.CTkFrame(self, fg_color="transparent")
+        bot_bar.pack(fill="x", padx=16, pady=(0, 10))
+
+        self.lbl_status = ctk.CTkLabel(
+            bot_bar,
+            text="กำลังโหลดข้อมูลการวิเคราะห์...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            text_color="#475569"
+        )
+        self.lbl_status.pack(side="left")
+
+        btn_close = ctk.CTkButton(
+            bot_bar,
+            text="ปิดหน้าต่าง",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#334155",
+            hover_color="#1e293b",
+            height=36,
+            width=110,
+            corner_radius=8,
+            command=self.destroy
+        )
+        btn_close.pack(side="right")
+
+    def _create_kpi_card(self, parent, col, title, initial_val, text_col, bg_col):
+        card = ctk.CTkFrame(parent, fg_color=bg_col, corner_radius=10, border_width=1, border_color="#cbd5e1")
+        card.grid(row=0, column=col, padx=5, pady=4, sticky="nsew")
+        lbl_v = ctk.CTkLabel(card, text=initial_val, font=ctk.CTkFont(family=self.font_family, size=22, weight="bold"), text_color=text_col)
+        lbl_v.pack(pady=(8, 2))
+        lbl_t = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=12), text_color="#334155")
+        lbl_t.pack(pady=(0, 8))
+        return lbl_v
+
+    def load_data(self):
+        res = analyze_attendance_anomalies(self.main_file, self.col_config)
+        if not res.get('success'):
+            messagebox.showerror("เกิดข้อผิดพลาด", res.get('error', 'ไม่สามารถวิเคราะห์ข้อมูลได้'))
+            self.destroy()
+            return
+
+        counts = res.get('counts', {})
+        self.anomalies_data = res.get('anomalies', [])
+
+        self.lbl_kpi_total.configure(text=f"{counts.get('total', 0):,} จุด")
+        self.lbl_kpi_punch.configure(text=f"{counts.get('missing_punch', 0):,} คน")
+        self.lbl_kpi_absent.configure(text=f"{counts.get('unrecorded_absence', 0):,} จุด")
+
+        # Distinct sheets
+        distinct_sheets = len(set(a['sheet'] for a in self.anomalies_data))
+        self.lbl_kpi_sheets.configure(text=f"{distinct_sheets} ชีท")
+
+        self.render_list()
+
+    def set_filter(self, filter_name):
+        self.active_filter = filter_name
+        self.btn_f_all.configure(fg_color="#1d4ed8" if filter_name == "all" else "#f1f5f9", text_color="#ffffff" if filter_name == "all" else "#334155")
+        self.btn_f_punch.configure(fg_color="#1d4ed8" if filter_name == "missing_punch" else "#f1f5f9", text_color="#ffffff" if filter_name == "missing_punch" else "#334155")
+        self.btn_f_absent.configure(fg_color="#1d4ed8" if filter_name == "unrecorded_absence" else "#f1f5f9", text_color="#ffffff" if filter_name == "unrecorded_absence" else "#334155")
+        self.render_list()
+
+    def on_search_changed(self):
+        self.search_query = self.txt_search.get().strip().lower()
+        self.render_list()
+
+    def render_list(self):
+        for child in self.list_scroll.winfo_children():
+            child.destroy()
+
+        filtered = []
+        for a in self.anomalies_data:
+            if self.active_filter != "all" and a['category'] != self.active_filter:
+                continue
+            if self.search_query:
+                q = self.search_query
+                match = (q in a['emp_id'].lower() or q in a['emp_name'].lower() or q in a['sheet'].lower())
+                if not match:
+                    continue
+            filtered.append(a)
+
+        self.lbl_status.configure(text=f"แสดง {len(filtered):,} รายการ จากทั้งหมด {len(self.anomalies_data):,} จุดผิดปกติ")
+
+        if not filtered:
+            empty_card = ctk.CTkFrame(self.list_scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+            empty_card.pack(fill="x", pady=20, padx=6)
+            lbl_empty = ctk.CTkLabel(
+                empty_card,
+                text="ไม่พบข้อมูลความผิดปกติ หรือข้อมูลการลงเวลาถูกต้องครบถ้วนสมบูรณ์ 100%",
+                font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+                text_color="#16a34a"
+            )
+            lbl_empty.pack(pady=30)
+            return
+
+        for idx, item in enumerate(filtered):
+            card = ctk.CTkFrame(self.list_scroll, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+            card.pack(fill="x", pady=4, padx=4)
+
+            top_row = ctk.CTkFrame(card, fg_color="transparent")
+            top_row.pack(fill="x", padx=14, pady=(10, 4))
+            top_row.grid_columnconfigure(0, weight=1)
+
+            lbl_emp = ctk.CTkLabel(
+                top_row,
+                text=f"[{idx+1:03d}] วันที่ {item['date']} (ชีท {item['sheet']})  |  รหัส: {item['emp_id']}  -  {item['emp_name']}",
+                font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+                text_color="#0f172a"
+            )
+            lbl_emp.grid(row=0, column=0, sticky="w")
+
+            is_punch = (item['category'] == 'missing_punch')
+            badge_bg = "#fef2f2" if is_punch else "#fff7ed"
+            badge_fg = "#b91c1c" if is_punch else "#c2410c"
+            badge = ctk.CTkLabel(
+                top_row,
+                text=f" {item['category_desc']} ",
+                font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+                fg_color=badge_bg,
+                text_color=badge_fg,
+                corner_radius=6
+            )
+            badge.grid(row=0, column=1, sticky="e")
+
+            mid_row = ctk.CTkFrame(card, fg_color="transparent")
+            mid_row.pack(fill="x", padx=14, pady=(0, 4))
+            lbl_detail = ctk.CTkLabel(
+                mid_row,
+                text=f"• สแกนดิบในชีท: [{item['scan_raw']}]  |  รายละเอียด: {item['detail']}",
+                font=ctk.CTkFont(family=self.font_family, size=12),
+                text_color="#334155"
+            )
+            lbl_detail.pack(anchor="w")
+
+            bot_row = ctk.CTkFrame(card, fg_color="transparent")
+            bot_row.pack(fill="x", padx=14, pady=(0, 10))
+            lbl_act = ctk.CTkLabel(
+                bot_row,
+                text=f"• ข้อเสนอแนะ: {item['action_needed']}",
+                font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+                text_color="#0369a1"
+            )
+            lbl_act.pack(anchor="w")
+
+    def export_to_excel(self):
+        if not self.anomalies_data:
+            messagebox.showinfo("ไม่มีข้อมูล", "ไม่พบข้อมูลความผิดปกติที่จะส่งออก")
+            return
+
+        default_name = f"รายงานเวลาทำงานและสแกนผิดปกติ_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        save_path = filedialog.asksaveasfilename(
+            parent=self,
+            title="บันทึกรายงานความผิดปกติเป็นไฟล์ Excel",
+            defaultextension=".xlsx",
+            initialfile=default_name,
+            filetypes=[("Excel Files", "*.xlsx")]
+        )
+        if not save_path:
+            return
+
+        try:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "รายงานเวลาผิดปกติ"
+
+            headers = [
+                "ลำดับ", "วันที่", "ชีทประจำวัน", "รหัสพนักงาน", "ชื่อพนักงาน",
+                "ประเภทความผิดปกติ", "สแกนดิบในชีท", "รายละเอียด", "ข้อเสนอแนะในการดำเนินการ"
+            ]
+            ws.append(headers)
+
+            # Header Styling: CNT Corporate Blue
+            header_fill = openpyxl.styles.PatternFill(start_color="1D4ED8", end_color="1D4ED8", fill_type="solid")
+            header_font = openpyxl.styles.Font(name="Tahoma", size=11, bold=True, color="FFFFFF")
+            thin_border = openpyxl.styles.Border(
+                left=openpyxl.styles.Side(style='thin', color='CBD5E1'),
+                right=openpyxl.styles.Side(style='thin', color='CBD5E1'),
+                top=openpyxl.styles.Side(style='thin', color='CBD5E1'),
+                bottom=openpyxl.styles.Side(style='thin', color='CBD5E1')
+            )
+
+            for col_num in range(1, len(headers) + 1):
+                cell = ws.cell(row=1, column=col_num)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
+
+            for idx, a in enumerate(self.anomalies_data, 1):
+                row_data = [
+                    idx,
+                    a['date'],
+                    a['sheet'],
+                    a['emp_id'],
+                    a['emp_name'],
+                    a['category_desc'],
+                    a['scan_raw'],
+                    a['detail'],
+                    a['action_needed']
+                ]
+                ws.append(row_data)
+                curr_row = idx + 1
+                for c_idx in range(1, len(row_data) + 1):
+                    c_cell = ws.cell(row=curr_row, column=c_idx)
+                    c_cell.font = openpyxl.styles.Font(name="Tahoma", size=10)
+                    c_cell.border = thin_border
+                    if c_idx in [1, 2, 3, 4, 6, 7]:
+                        c_cell.alignment = openpyxl.styles.Alignment(horizontal="center")
+
+            # Auto fit width
+            for col in ws.columns:
+                max_len = max(len(str(cell.value or '')) for cell in col)
+                col_letter = openpyxl.utils.get_column_letter(col[0].column)
+                ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+            wb.save(save_path)
+            messagebox.showinfo(
+                "ส่งออกสำเร็จ",
+                f"สร้างไฟล์รายงานความผิดปกติเรียบร้อยแล้ว:\n{save_path}"
+            )
+        except Exception as e:
+            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ Excel ได้: {str(e)}")
+
+# -------------------------------------------------------------
 # ระบบอัปเดตโปรแกรมอัตโนมัติผ่าน GitHub Releases (Auto-Updater)
 # -------------------------------------------------------------
 
@@ -3353,6 +3793,18 @@ class ModernCustomTkinterApp:
         self.setup_ui()
         self.load_saved_settings()
 
+        # บันทึกการตั้งค่าอัตโนมัติเมื่อปิดโปรแกรม
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close_app)
+
+        # ระบบ Drag & Drop ลากไฟล์มาวางบนโปรแกรมได้ทันที
+        self.dnd_enabled = False
+        try:
+            import windnd
+            windnd.hook_dropfiles(self.root, func=self.on_files_dropped)
+            self.dnd_enabled = True
+        except Exception:
+            self.dnd_enabled = False
+
         # ตรวจสอบการอัปเดตแบบเบื้องหลัง (Background update check)
         self.root.after(2000, self.start_silent_update_check)
 
@@ -3458,7 +3910,22 @@ class ModernCustomTkinterApp:
             corner_radius=8,
             command=self.open_analytics
         )
-        btn_analytics.grid(row=0, column=1, padx=4)
+        btn_analytics.grid(row=0, column=1, padx=3)
+
+        btn_anomaly = ctk.CTkButton(
+            toolbar_box,
+            text="วิเคราะห์เวลาผิดปกติ",
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            fg_color="#b45309",
+            hover_color="#92400e",
+            text_color="#ffffff",
+            border_width=1,
+            border_color="#d97706",
+            height=38,
+            corner_radius=8,
+            command=self.open_anomaly_dialog
+        )
+        btn_anomaly.grid(row=0, column=2, padx=3)
 
         btn_inspector = ctk.CTkButton(
             toolbar_box,
@@ -3473,7 +3940,7 @@ class ModernCustomTkinterApp:
             corner_radius=8,
             command=self.open_inspector
         )
-        btn_inspector.grid(row=0, column=2, padx=4)
+        btn_inspector.grid(row=0, column=3, padx=3)
 
         self.btn_update = ctk.CTkButton(
             toolbar_box,
@@ -3486,7 +3953,7 @@ class ModernCustomTkinterApp:
             corner_radius=8,
             command=self.open_updater
         )
-        self.btn_update.grid(row=0, column=3, padx=4)
+        self.btn_update.grid(row=0, column=4, padx=3)
 
         # แถวล่าง: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
         header_title_bar = ctk.CTkFrame(header_frame, fg_color="transparent")
@@ -3852,8 +4319,25 @@ class ModernCustomTkinterApp:
         )
         lbl_cols_title.grid(row=0, column=0, sticky="w")
 
+        btn_box_cols = ctk.CTkFrame(header_cols_box, fg_color="transparent")
+        btn_box_cols.grid(row=0, column=1, sticky="e")
+
+        btn_save_cols = ctk.CTkButton(
+            btn_box_cols,
+            text="บันทึกตำแหน่งคอลัมน์",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color=self.color_emerald,
+            hover_color=self.color_emerald_hover,
+            text_color="#ffffff",
+            height=32,
+            width=150,
+            corner_radius=8,
+            command=self.save_column_settings_explicit
+        )
+        btn_save_cols.pack(side="left", padx=(0, 8))
+
         btn_reset_cols = ctk.CTkButton(
-            header_cols_box,
+            btn_box_cols,
             text="คืนค่ามาตรฐาน",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color="#f1f5f9",
@@ -3862,11 +4346,11 @@ class ModernCustomTkinterApp:
             border_width=1,
             border_color="#cbd5e1",
             height=32,
-            width=130,
+            width=120,
             corner_radius=8,
             command=self.reset_column_defaults
         )
-        btn_reset_cols.grid(row=0, column=1, sticky="e")
+        btn_reset_cols.pack(side="left")
 
         lbl_cols_hint = ctk.CTkLabel(
             self.frame_cols_body,
@@ -3936,6 +4420,13 @@ class ModernCustomTkinterApp:
         self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
         self.entry_start_row.insert(0, "2")
         self.entry_start_row.grid(row=1, column=7, pady=(0, 10))
+
+        # ผูก Event บันทึกอัตโนมัติทันทีที่พิมพ์หรือเปลี่ยนช่อง
+        for entry_w in [self.entry_col_emp, self.entry_col_name, self.entry_col_scan,
+                        self.entry_col_leave, self.entry_col_in, self.entry_col_out,
+                        self.entry_col_code, self.entry_start_row]:
+            entry_w.bind("<KeyRelease>", lambda e: self.save_current_settings())
+            entry_w.bind("<FocusOut>", lambda e: self.save_current_settings())
 
         # แถบตั้งค่า GitHub Repository สำหรับระบบอัปเดตอัตโนมัติ
         repo_bar = ctk.CTkFrame(self.frame_cols_body, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
@@ -4242,6 +4733,86 @@ class ModernCustomTkinterApp:
         }
         save_app_settings(data)
 
+    def on_close_app(self):
+        """บันทึกการตั้งค่าทั้งหมดก่อนปิดหน้าต่างโปรแกรม"""
+        try:
+            self.save_current_settings()
+        except Exception:
+            pass
+        self.root.destroy()
+
+    def save_column_settings_explicit(self):
+        """บันทึกการตั้งค่าตำแหน่งคอลัมน์โดยผู้ใช้กดปุ่ม"""
+        self.save_current_settings()
+        self.log("บันทึกการตั้งค่าตำแหน่งคอลัมน์เป้าหมายลงระบบเรียบร้อย (ระบบจดจำถาวร)")
+        messagebox.showinfo(
+            "บันทึกสำเร็จ",
+            "บันทึกตำแหน่งคอลัมน์เป้าหมายเรียบร้อยแล้ว\nระบบจะจดจำการตั้งค่านี้ไว้ทุกครั้งที่เปิดโปรแกรม"
+        )
+
+    def on_files_dropped(self, files):
+        """จัดการเมื่อผู้ใช้ลากไฟล์มาวางบนหน้าต่างโปรแกรม (Drag & Drop)"""
+        if not files:
+            return
+
+        valid_paths = []
+        for f in files:
+            if isinstance(f, bytes):
+                for enc in ['utf-8', 'mbcs', 'cp874']:
+                    try:
+                        f = f.decode(enc)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                if isinstance(f, bytes):
+                    f = f.decode('utf-8', errors='ignore')
+            path_str = os.path.normpath(str(f))
+            if os.path.isfile(path_str) and path_str.lower().endswith(('.xlsx', '.xlsm', '.xls')):
+                valid_paths.append(path_str)
+
+        if not valid_paths:
+            self.log("ไฟล์ที่ลากมาวางไม่ใช่ไฟล์ Excel (.xlsx, .xlsm, .xls)")
+            return
+
+        if len(valid_paths) == 1:
+            p = valid_paths[0]
+            fn = os.path.basename(p).lower()
+            if "อนุมัติ" in fn or "leave" in fn:
+                self.txt_appr.delete(0, 'end')
+                self.txt_appr.insert(0, p)
+                self.save_current_settings()
+                self.log(f"ลากและวางไฟล์การลาที่ได้รับอนุมัติ: {os.path.basename(p)}")
+            elif "ใบแจ้ง" in fn or "attendance" in fn or "ลืม" in fn:
+                self.txt_att.delete(0, 'end')
+                self.txt_att.insert(0, p)
+                self.save_current_settings()
+                self.log(f"ลากและวางไฟล์ใบแจ้งเวลาทำงาน: {os.path.basename(p)}")
+            else:
+                self.txt_main.delete(0, 'end')
+                self.txt_main.insert(0, p)
+                self.save_current_settings()
+                self.log(f"ลากและวางไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
+        else:
+            # ลากหลายไฟล์มาพร้อมกัน จัดเข้าแต่ละช่องให้อัตโนมัติ
+            assigned_main = False
+            for p in valid_paths:
+                fn = os.path.basename(p).lower()
+                if "อนุมัติ" in fn or "leave" in fn:
+                    self.txt_appr.delete(0, 'end')
+                    self.txt_appr.insert(0, p)
+                    self.log(f"ระบุไฟล์การลาที่ได้รับอนุมัติ: {os.path.basename(p)}")
+                elif "ใบแจ้ง" in fn or "attendance" in fn or "ลืม" in fn:
+                    self.txt_att.delete(0, 'end')
+                    self.txt_att.insert(0, p)
+                    self.log(f"ระบุไฟล์ใบแจ้งเวลาทำงาน: {os.path.basename(p)}")
+                elif not assigned_main:
+                    self.txt_main.delete(0, 'end')
+                    self.txt_main.insert(0, p)
+                    assigned_main = True
+                    self.log(f"ระบุไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
+            self.save_current_settings()
+            self.log("จัดไฟล์นำเข้าลงช่องทั้งหมดเรียบร้อยแล้ว")
+
     # -------------------------------------------------------------
     # UI Actions & Modal Openers
     # -------------------------------------------------------------
@@ -4322,6 +4893,13 @@ class ModernCustomTkinterApp:
             return
 
         AnalyticsDialog(self.root, main_file, appr_file, att_file, col_cfg, self.icon_path)
+
+    def open_anomaly_dialog(self):
+        main_file = self.txt_main.get().strip()
+        if not main_file or not os.path.exists(main_file):
+            messagebox.showerror("แจ้งเตือน", "กรุณาระบุไฟล์รายงาน STAFF TIME (.xlsx) ให้ถูกต้องก่อนเปิดระบบวิเคราะห์เวลาทำงานผิดปกติ")
+            return
+        AnomalyDialog(self.root, main_file=main_file, col_config=self.get_column_config(), icon_path=self.icon_path)
 
     def open_preview(self):
         main_file = self.txt_main.get().strip()
