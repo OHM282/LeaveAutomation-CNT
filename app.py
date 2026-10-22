@@ -3757,8 +3757,8 @@ class ModernCustomTkinterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("CNT STAFF TIME AUTOMATION - บริษัท คริสเตียนีและนีลเส็น (ไทย) จำกัด (มหาชน) [BY WERAWAT THAMRONGDULLAPARK]")
-        self.root.geometry("1220x940")
-        self.root.minsize(1080, 800)
+        self.root.geometry("1220x890")
+        self.root.minsize(1040, 720)
         
         self.font_family = "Tahoma"
         self.output_file = None
@@ -3957,12 +3957,12 @@ class ModernCustomTkinterApp:
 
         # แถวล่าง: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
         header_title_bar = ctk.CTkFrame(header_frame, fg_color="transparent")
-        header_title_bar.pack(fill="x", padx=24, pady=(0, 14))
+        header_title_bar.pack(fill="x", padx=24, pady=(0, 8))
 
         lbl_title = ctk.CTkLabel(
             header_title_bar,
             text="ระบบบันทึกเวลาทำงานและประมวลผลการลาอัตโนมัติ (STAFF TIME)",
-            font=ctk.CTkFont(family=self.font_family, size=23, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
             text_color="#ffffff"
         )
         lbl_title.pack(anchor="w")
@@ -3970,10 +3970,10 @@ class ModernCustomTkinterApp:
         lbl_subtitle = ctk.CTkLabel(
             header_title_bar,
             text="ระบบมาตรฐานส่วนกลางสำหรับทุกโครงการและทุกหน่วยงานของ CNT ทั่วประเทศ (Universal Edition)",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            font=ctk.CTkFont(family=self.font_family, size=12),
             text_color="#cbd5e1"
         )
-        lbl_subtitle.pack(anchor="w", pady=(2, 0))
+        lbl_subtitle.pack(anchor="w", pady=(1, 0))
 
         # -------------------------------------------------------------
         # 2. พื้นที่เนื้อหาหลัก (Scrollable Card Container)
@@ -3986,306 +3986,211 @@ class ModernCustomTkinterApp:
         main_scroll.grid(row=1, column=0, sticky="nsew", padx=16, pady=12)
         main_scroll.grid_columnconfigure(0, weight=1)
 
-        # CARD 1: ไฟล์รายงาน STAFF TIME (.xlsx)
+        # CARD 1: ไฟล์รายงาน STAFF TIME (.xlsx) - Compact
         card_main = ctk.CTkFrame(
             main_scroll,
-            corner_radius=14,
+            corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_main.grid(row=0, column=0, sticky="ew", pady=(0, 14), padx=4)
+        card_main.grid(row=0, column=0, sticky="ew", pady=(0, 6), padx=4)
         card_main.grid_columnconfigure(1, weight=1)
 
-        c1_header = ctk.CTkFrame(card_main, fg_color="transparent")
-        c1_header.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 4))
-        
+        c1_row = ctk.CTkFrame(card_main, fg_color="transparent")
+        c1_row.pack(fill="x", padx=14, pady=8)
+        c1_row.grid_columnconfigure(1, weight=1)
+
         badge_c1 = ctk.CTkLabel(
-            c1_header,
+            c1_row,
             text="ขั้นตอนที่ 1",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color=self.color_primary,
             text_color="#ffffff",
             corner_radius=6,
-            height=26,
-            width=85
+            height=28,
+            width=80
         )
-        badge_c1.pack(side="left", padx=(0, 10))
-
-        lbl_c1_title = ctk.CTkLabel(
-            c1_header,
-            text="ไฟล์รายงาน STAFF TIME ประจำงวดของหน่วยงาน / โครงการ (.xlsx)",
-            font=ctk.CTkFont(family=self.font_family, size=17, weight="bold"),
-            text_color=self.color_text_dark
-        )
-        lbl_c1_title.pack(side="left")
-
-        lbl_main_desc = ctk.CTkLabel(
-            card_main,
-            text="ไฟล์ตารางเวลาทำงานหลักของหน่วยงาน/โครงการ เช่น '1856 3-4-5 DD.111026-311026.xlsx' (รองรับแบบฟอร์มที่มีชีทวันที่ประจำงวด)",
-            font=ctk.CTkFont(family=self.font_family, size=13),
-            text_color=self.color_text_muted
-        )
-        lbl_main_desc.grid(row=1, column=0, columnspan=3, sticky="w", padx=20, pady=(0, 12))
-
-        lbl_c1_tag = ctk.CTkLabel(
-            card_main,
-            text="ไฟล์ STAFF TIME:",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
-            text_color=self.color_text_dark
-        )
-        lbl_c1_tag.grid(row=2, column=0, sticky="w", padx=(20, 10), pady=(0, 18))
+        badge_c1.grid(row=0, column=0, padx=(0, 10))
 
         self.txt_main = ctk.CTkEntry(
-            card_main,
-            placeholder_text="คลิกปุ่ม 'เลือกไฟล์ STAFF TIME...' ด้านขวาเพื่อระบุไฟล์ตารางเวลา...",
-            font=ctk.CTkFont(family=self.font_family, size=14),
-            height=48,
+            c1_row,
+            placeholder_text="คลิกปุ่มด้านขวา หรือ ลากไฟล์ STAFF TIME ประจำงวด (.xlsx) มาวางที่นี่...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=38,
             corner_radius=8,
             border_color="#cbd5e1",
             fg_color="#f8fafc"
         )
-        self.txt_main.grid(row=2, column=1, sticky="ew", padx=(0, 12), pady=(0, 18))
+        self.txt_main.grid(row=0, column=1, sticky="ew", padx=(0, 10))
 
         btn_browse_main = ctk.CTkButton(
-            card_main,
+            c1_row,
             text="เลือกไฟล์ STAFF TIME...",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
-            height=48,
-            width=190,
+            height=38,
+            width=180,
             corner_radius=8,
             command=self.browse_main
         )
-        btn_browse_main.grid(row=2, column=2, padx=(0, 20), pady=(0, 18))
+        btn_browse_main.grid(row=0, column=2)
 
-        # CARD 2: ข้อมูลนำเข้า 2 แหล่ง (การลาที่ได้รับการอนุมัติ & ใบแจ้งการมาทำงาน)
+        # CARD 2: ข้อมูลนำเข้า 2 แหล่ง (การลาที่ได้รับการอนุมัติ & ใบแจ้งการมาทำงาน) - Compact Single-Level
         card_sources = ctk.CTkFrame(
             main_scroll,
-            corner_radius=14,
+            corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_sources.grid(row=1, column=0, sticky="ew", pady=(0, 14), padx=4)
+        card_sources.grid(row=1, column=0, sticky="ew", pady=(0, 6), padx=4)
         card_sources.grid_columnconfigure(0, weight=1)
-        card_sources.grid_columnconfigure(1, weight=1)
 
-        c2_header = ctk.CTkFrame(card_sources, fg_color="transparent")
-        c2_header.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(16, 4))
+        # แถบหัวข้อ Card 2 (กะทัดรัด)
+        c2_head = ctk.CTkFrame(card_sources, fg_color="transparent")
+        c2_head.pack(fill="x", padx=14, pady=(6, 2))
 
         badge_c2 = ctk.CTkLabel(
-            c2_header,
+            c2_head,
             text="ขั้นตอนที่ 2",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color=self.color_primary,
             text_color="#ffffff",
             corner_radius=6,
             height=26,
-            width=85
+            width=80
         )
         badge_c2.pack(side="left", padx=(0, 10))
 
         lbl_c2_title = ctk.CTkLabel(
-            c2_header,
-            text="เลือกไฟล์นำเข้าข้อมูล (วันลาที่ได้รับอนุมัติ และ/หรือ ใบแจ้งเวลาทำงานจาก CNTIWEB)",
-            font=ctk.CTkFont(family=self.font_family, size=17, weight="bold"),
+            c2_head,
+            text="ไฟล์นำเข้าข้อมูล (วันลาที่ได้รับอนุมัติ และ/หรือ ใบแจ้งเวลาทำงานจาก CNTIWEB)",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
             text_color=self.color_text_dark
         )
         lbl_c2_title.pack(side="left")
 
-        lbl_c2_desc = ctk.CTkLabel(
-            card_sources,
-            text="สามารถเลือกไฟล์อย่างใดอย่างหนึ่ง หรือประมวลผลพร้อมกันทั้ง 2 ไฟล์ได้ตามรอบการทำงาน",
-            font=ctk.CTkFont(family=self.font_family, size=13),
-            text_color=self.color_text_muted
-        )
-        lbl_c2_desc.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 12))
-
-        # 2.1 การลาที่ได้รับการอนุมัติ (ฝั่งซ้าย)
-        frame_leave = ctk.CTkFrame(
-            card_sources,
-            corner_radius=12,
-            fg_color="#ffffff",
-            border_width=1.5,
-            border_color="#cbd5e1"
-        )
-        frame_leave.grid(row=2, column=0, sticky="nsew", padx=(16, 8), pady=(0, 16))
-        frame_leave.grid_columnconfigure(0, weight=1)
-
-        leave_top = ctk.CTkFrame(frame_leave, fg_color="transparent")
-        leave_top.grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
+        # 2.1 แถวข้อมูลวันลา (Row 1)
+        r_leave = ctk.CTkFrame(card_sources, fg_color="transparent")
+        r_leave.pack(fill="x", padx=14, pady=(2, 3))
+        r_leave.grid_columnconfigure(1, weight=1)
 
         badge_leave = ctk.CTkLabel(
-            leave_top,
+            r_leave,
             text="ข้อมูลวันลา",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color=self.color_accent,
             text_color="#ffffff",
             corner_radius=6,
-            height=24,
+            height=28,
             width=80
         )
-        badge_leave.pack(side="left", padx=(0, 8))
-
-        lbl_leave_h = ctk.CTkLabel(
-            leave_top,
-            text="การลาที่ได้รับอนุมัติ (อนุมัติ.xlsx)",
-            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
-            text_color=self.color_text_dark
-        )
-        lbl_leave_h.pack(side="left")
+        badge_leave.grid(row=0, column=0, padx=(0, 10))
 
         self.txt_appr = ctk.CTkEntry(
-            frame_leave,
-            placeholder_text="คลิกเลือกไฟล์อนุมัติการลา (เช่น อนุมัติ.xlsx)...",
-            font=ctk.CTkFont(family=self.font_family, size=14),
-            height=44,
+            r_leave,
+            placeholder_text="คลิกเลือก หรือลากไฟล์การลาที่ได้รับอนุมัติ (เช่น อนุมัติ.xlsx)...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=36,
             corner_radius=8,
             border_color="#cbd5e1",
             fg_color="#f8fafc"
         )
-        self.txt_appr.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
-
-        btn_box_leave = ctk.CTkFrame(frame_leave, fg_color="transparent")
-        btn_box_leave.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
-        btn_box_leave.grid_columnconfigure(0, weight=1)
+        self.txt_appr.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
         btn_browse_appr = ctk.CTkButton(
-            btn_box_leave,
-            text="เลือกไฟล์วันลา (อนุมัติ)...",
+            r_leave,
+            text="เลือกไฟล์วันลา...",
             font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
             fg_color=self.color_accent,
             hover_color=self.color_accent_hover,
-            height=42,
+            height=36,
+            width=140,
             corner_radius=8,
             command=self.browse_appr
         )
-        btn_browse_appr.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        btn_browse_appr.grid(row=0, column=2, padx=(0, 6))
 
         btn_clear_appr = ctk.CTkButton(
-            btn_box_leave,
-            text="ล้างข้อมูล",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            r_leave,
+            text="ล้าง",
+            font=ctk.CTkFont(family=self.font_family, size=12),
             fg_color="#e2e8f0",
             hover_color="#cbd5e1",
             text_color="#334155",
-            height=42,
-            width=85,
+            height=36,
+            width=50,
             corner_radius=8,
             command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings()]
         )
-        btn_clear_appr.grid(row=0, column=1)
+        btn_clear_appr.grid(row=0, column=3)
 
-        rules_leave_box = ctk.CTkFrame(frame_leave, fg_color="#f8fafc", corner_radius=8, border_width=1, border_color="#e2e8f0")
-        rules_leave_box.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
-
-        lbl_leave_rules = ctk.CTkLabel(
-            rules_leave_box,
-            text="• นำเข้าวันลาทุกประเภทที่ได้รับอนุมัติในงวดนั้น\n• รหัสย่ออัตโนมัติ: พักร้อน (พ) | ป่วย (ป) | กิจ/อื่นๆ (อ)\n• ลาครึ่งวัน: ระบบจะคำนวณและปรับเวลาเข้า/ออกให้อัตโนมัติ",
-            font=ctk.CTkFont(family=self.font_family, size=12),
-            text_color=self.color_text_muted,
-            justify="left"
-        )
-        lbl_leave_rules.pack(anchor="w", padx=12, pady=10)
-
-        # 2.2 ใบแจ้งการมาทำงาน (ฝั่งขวา)
-        frame_att = ctk.CTkFrame(
-            card_sources,
-            corner_radius=12,
-            fg_color="#ffffff",
-            border_width=1.5,
-            border_color="#cbd5e1"
-        )
-        frame_att.grid(row=2, column=1, sticky="nsew", padx=(8, 16), pady=(0, 16))
-        frame_att.grid_columnconfigure(0, weight=1)
-
-        att_top = ctk.CTkFrame(frame_att, fg_color="transparent")
-        att_top.grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
+        # 2.2 แถวใบแจ้งเวลาทำงาน (Row 2)
+        r_att = ctk.CTkFrame(card_sources, fg_color="transparent")
+        r_att.pack(fill="x", padx=14, pady=(2, 8))
+        r_att.grid_columnconfigure(1, weight=1)
 
         badge_att = ctk.CTkLabel(
-            att_top,
+            r_att,
             text="ใบแจ้งเวลา",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color=self.color_emerald,
             text_color="#ffffff",
             corner_radius=6,
-            height=24,
+            height=28,
             width=80
         )
-        badge_att.pack(side="left", padx=(0, 8))
-
-        lbl_att_h = ctk.CTkLabel(
-            att_top,
-            text="ใบแจ้งการมาทำงาน / ลืมสแกนนิ้ว",
-            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
-            text_color=self.color_text_dark
-        )
-        lbl_att_h.pack(side="left")
+        badge_att.grid(row=0, column=0, padx=(0, 10))
 
         self.txt_att = ctk.CTkEntry(
-            frame_att,
-            placeholder_text="คลิกเลือกไฟล์ใบแจ้งการมาทำงาน (ถ้ามี)...",
-            font=ctk.CTkFont(family=self.font_family, size=14),
-            height=44,
+            r_att,
+            placeholder_text="คลิกเลือก หรือลากไฟล์ใบแจ้งการมาทำงาน / ลืมสแกนนิ้ว (ถ้ามี)...",
+            font=ctk.CTkFont(family=self.font_family, size=13),
+            height=36,
             corner_radius=8,
             border_color="#cbd5e1",
             fg_color="#f8fafc"
         )
-        self.txt_att.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
-
-        btn_box_att = ctk.CTkFrame(frame_att, fg_color="transparent")
-        btn_box_att.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
-        btn_box_att.grid_columnconfigure(0, weight=1)
+        self.txt_att.grid(row=0, column=1, sticky="ew", padx=(0, 8))
 
         btn_browse_att = ctk.CTkButton(
-            btn_box_att,
-            text="เลือกใบแจ้งการมาทำงาน...",
+            r_att,
+            text="เลือกใบแจ้งเวลา...",
             font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
-            height=42,
+            height=36,
+            width=140,
             corner_radius=8,
             command=self.browse_att
         )
-        btn_browse_att.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        btn_browse_att.grid(row=0, column=2, padx=(0, 6))
 
         btn_clear_att = ctk.CTkButton(
-            btn_box_att,
-            text="ล้างข้อมูล",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            r_att,
+            text="ล้าง",
+            font=ctk.CTkFont(family=self.font_family, size=12),
             fg_color="#e2e8f0",
             hover_color="#cbd5e1",
             text_color="#334155",
-            height=42,
-            width=85,
+            height=36,
+            width=50,
             corner_radius=8,
             command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings()]
         )
-        btn_clear_att.grid(row=0, column=1)
-
-        rules_att_box = ctk.CTkFrame(frame_att, fg_color="#f8fafc", corner_radius=8, border_width=1, border_color="#e2e8f0")
-        rules_att_box.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
-
-        lbl_att_rules = ctk.CTkLabel(
-            rules_att_box,
-            text="• แจ้งเข้างานเช้า: ปรับเวลาเข้า (In) เป็น 07:30 อัตโนมัติ\n• แจ้งเลิกงาน: เริ่ม 16:30 และปัดเศษนาทีลงช่วงละ 30 นาที\n• เติมหมายเหตุ 'มีใบแจ้งฯ' ลงในช่องประเภทลาให้อัตโนมัติ",
-            font=ctk.CTkFont(family=self.font_family, size=12),
-            text_color=self.color_text_muted,
-            justify="left"
-        )
-        lbl_att_rules.pack(anchor="w", padx=12, pady=10)
+        btn_clear_att.grid(row=0, column=3)
 
         # CARD 3: กำหนดช่องคอลัมน์เป้าหมายในไฟล์ STAFF TIME (Universal)
         card_cols = ctk.CTkFrame(
             main_scroll,
-            corner_radius=14,
+            corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_cols.grid(row=2, column=0, sticky="ew", pady=(0, 14), padx=4)
+        card_cols.grid(row=2, column=0, sticky="ew", pady=(0, 6), padx=4)
 
         self.cols_expanded = False
 
@@ -4299,11 +4204,11 @@ class ModernCustomTkinterApp:
             border_width=1,
             border_color="#cbd5e1",
             anchor="w",
-            height=42,
-            corner_radius=10,
+            height=36,
+            corner_radius=8,
             command=self.toggle_column_settings
         )
-        self.btn_toggle_cols.pack(fill="x", padx=10, pady=8)
+        self.btn_toggle_cols.pack(fill="x", padx=10, pady=6)
 
         self.frame_cols_body = ctk.CTkFrame(card_cols, fg_color="transparent")
 
@@ -4465,122 +4370,111 @@ class ModernCustomTkinterApp:
         )
         btn_save_repo.pack(side="left", padx=(4, 10), pady=8)
 
-        # CARD 4: รูปแบบการบันทึกไฟล์ (Save Options)
+        # CARD 4: รูปแบบการบันทึกไฟล์ (Save Options - Single Line Compact)
         card_save = ctk.CTkFrame(
             main_scroll,
-            corner_radius=14,
+            corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_save.grid(row=3, column=0, sticky="ew", pady=(0, 14), padx=4)
-        
-        c4_header = ctk.CTkFrame(card_save, fg_color="transparent")
-        c4_header.pack(fill="x", padx=20, pady=(16, 6))
+        card_save.grid(row=3, column=0, sticky="ew", pady=(0, 6), padx=4)
+
+        save_row = ctk.CTkFrame(card_save, fg_color="transparent")
+        save_row.pack(fill="x", padx=14, pady=6)
 
         badge_c4 = ctk.CTkLabel(
-            c4_header,
+            save_row,
             text="การบันทึกไฟล์",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color="#475569",
             text_color="#ffffff",
             corner_radius=6,
             height=26,
-            width=90
+            width=85
         )
-        badge_c4.pack(side="left", padx=(0, 10))
-
-        lbl_save_title = ctk.CTkLabel(
-            c4_header,
-            text="รูปแบบการบันทึกไฟล์ผลลัพธ์ (Output Options)",
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
-            text_color=self.color_text_dark
-        )
-        lbl_save_title.pack(side="left")
+        badge_c4.pack(side="left", padx=(0, 16))
 
         self.save_mode_var = tk.StringVar(value="new_file")
-        
-        radio_box = ctk.CTkFrame(card_save, fg_color="transparent")
-        radio_box.pack(fill="x", padx=20, pady=(0, 16))
-        
+
         r1 = ctk.CTkRadioButton(
-            radio_box,
-            text="สร้างไฟล์ใหม่ (มีชื่อ _updated_วันที่ ต่อท้าย - ปลอดภัยสูงสุด แนะนำ)",
+            save_row,
+            text="สร้างไฟล์ใหม่ (_updated_วันที่ - แนะนำ)",
             variable=self.save_mode_var,
             value="new_file",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
-            radiobutton_width=22,
-            radiobutton_height=22,
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            radiobutton_width=20,
+            radiobutton_height=20,
             fg_color=self.color_primary,
             command=self.save_current_settings
         )
-        r1.pack(side="left", padx=(0, 32))
-        
+        r1.pack(side="left", padx=(0, 24))
+
         r2 = ctk.CTkRadioButton(
-            radio_box,
-            text="บันทึกทับไฟล์เดิม (ระบบจะสร้างไฟล์สำรอง _backup.xlsx ให้อัตโนมัติก่อนเขียนทับ)",
+            save_row,
+            text="บันทึกทับไฟล์เดิม (สร้างไฟล์สำรอง _backup.xlsx ให้อัตโนมัติ)",
             variable=self.save_mode_var,
             value="overwrite",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
-            radiobutton_width=22,
-            radiobutton_height=22,
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            radiobutton_width=20,
+            radiobutton_height=20,
             fg_color=self.color_primary,
             command=self.save_current_settings
         )
         r2.pack(side="left")
 
-        # 5. ปุ่มแอคชันหลัก: ตรวจสอบรายการแก้ไข & ปุ่มเริ่มประมวลผล (Senior-Friendly Big Targets)
+        # 5. ปุ่มแอคชันหลัก: ตรวจสอบรายการแก้ไข & ปุ่มเริ่มประมวลผล (Compact & Senior-Friendly)
         action_frame = ctk.CTkFrame(main_scroll, fg_color="transparent")
-        action_frame.grid(row=4, column=0, sticky="ew", pady=(6, 14), padx=4)
+        action_frame.grid(row=4, column=0, sticky="ew", pady=(2, 6), padx=4)
         action_frame.grid_columnconfigure(0, weight=1)
 
         self.btn_preview = ctk.CTkButton(
             action_frame,
             text="ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง (Pre-Check Preview)",
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
             fg_color=self.color_accent,
             hover_color=self.color_accent_hover,
-            height=52,
-            corner_radius=10,
+            height=42,
+            corner_radius=8,
             command=self.open_preview
         )
-        self.btn_preview.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self.btn_preview.grid(row=0, column=0, sticky="ew", pady=(0, 5))
 
         self.btn_process = ctk.CTkButton(
             action_frame,
             text="เริ่มประมวลผลและบันทึกข้อมูลลงไฟล์ STAFF TIME ทันที",
-            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=18, weight="bold"),
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
-            height=64,
-            corner_radius=12,
+            height=52,
+            corner_radius=10,
             command=self.start_processing_thread
         )
-        self.btn_process.grid(row=1, column=0, sticky="ew", pady=(0, 14))
+        self.btn_process.grid(row=1, column=0, sticky="ew", pady=(0, 5))
 
         self.progress_bar = ctk.CTkProgressBar(
             action_frame,
-            height=16,
-            corner_radius=8,
+            height=10,
+            corner_radius=5,
             progress_color=self.color_emerald,
             fg_color="#e2e8f0"
         )
         self.progress_bar.set(0.0)
         self.progress_bar.grid(row=2, column=0, sticky="ew")
 
-        # 6. หน้าต่างแสดงผลการทำงาน (Live Log Box)
+        # 6. หน้าต่างแสดงผลการทำงาน (Live Log Box - Compact)
         card_log = ctk.CTkFrame(
             main_scroll,
-            corner_radius=14,
+            corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_log.grid(row=5, column=0, sticky="ew", pady=(4, 16), padx=4)
+        card_log.grid(row=5, column=0, sticky="ew", pady=(2, 4), padx=4)
         card_log.grid_columnconfigure(0, weight=1)
 
         log_top_frame = ctk.CTkFrame(card_log, fg_color="transparent")
-        log_top_frame.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 10))
+        log_top_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=(8, 4))
         log_top_frame.grid_columnconfigure(0, weight=1)
 
         log_h_box = ctk.CTkFrame(log_top_frame, fg_color="transparent")
@@ -4593,70 +4487,70 @@ class ModernCustomTkinterApp:
             fg_color="#475569",
             text_color="#ffffff",
             corner_radius=6,
-            height=26,
-            width=90
+            height=24,
+            width=80
         )
-        badge_log.pack(side="left", padx=(0, 10))
+        badge_log.pack(side="left", padx=(0, 8))
 
         lbl_log_title = ctk.CTkLabel(
             log_h_box,
-            text="บันทึกสถานะการทำงานแบบ Real-time (System Activity Log)",
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text="บันทึกสถานะการทำงาน (System Activity Log)",
+            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
             text_color=self.color_text_dark
         )
         lbl_log_title.pack(side="left")
 
         self.btn_open_report = ctk.CTkButton(
             log_top_frame,
-            text="เปิดรายงานตรวจสอบ (Audit Report)",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            text="เปิดรายงานตรวจสอบ",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
-            height=38,
-            corner_radius=8,
+            height=30,
+            corner_radius=6,
             state="disabled",
             command=self.open_audit_report
         )
-        self.btn_open_report.grid(row=0, column=1, padx=(0, 8))
+        self.btn_open_report.grid(row=0, column=1, padx=(0, 6))
 
         self.btn_open_folder = ctk.CTkButton(
             log_top_frame,
             text="เปิดโฟลเดอร์ผลลัพธ์",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
-            height=38,
-            corner_radius=8,
+            height=30,
+            corner_radius=6,
             state="disabled",
             command=self.open_result_folder
         )
-        self.btn_open_folder.grid(row=0, column=2, padx=(0, 8))
+        self.btn_open_folder.grid(row=0, column=2, padx=(0, 6))
 
         btn_clear_log = ctk.CTkButton(
             log_top_frame,
             text="ล้างข้อความ",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            font=ctk.CTkFont(family=self.font_family, size=12),
             fg_color="#e2e8f0",
             hover_color="#cbd5e1",
             text_color="#334155",
-            height=38,
-            width=90,
-            corner_radius=8,
+            height=30,
+            width=80,
+            corner_radius=6,
             command=self.clear_log
         )
         btn_clear_log.grid(row=0, column=3)
 
         self.txt_log = ctk.CTkTextbox(
             card_log,
-            height=260,
-            corner_radius=10,
-            font=ctk.CTkFont(family="Tahoma", size=14),
+            height=130,
+            corner_radius=8,
+            font=ctk.CTkFont(family="Tahoma", size=13),
             fg_color="#f8fafc",
             text_color="#0f172a",
             border_width=1.5,
             border_color="#cbd5e1"
         )
-        self.txt_log.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 18))
+        self.txt_log.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 8))
 
         # -------------------------------------------------------------
         # 3. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Footer Status & Credits)
