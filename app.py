@@ -3757,6 +3757,8 @@ class UpdateDialog(ctk.CTkToplevel):
                 bat_path = os.path.join(exe_dir, "updater.bat")
                 bat_content = f"""@echo off
 chcp 65001 >nul
+set _MEIPASS2=
+set _MEIPASS=
 title อัปเดตโปรแกรม LeaveAutomation_1856
 echo ========================================================
 echo    กำลังดำเนินการอัปเดต LeaveAutomation_1856 เป็นเวอร์ชันใหม่...
@@ -3776,15 +3778,22 @@ if not exist "{current_exe}" (
     exit /b 1
 )
 echo ติดตั้งเสร็จสิ้น กำลังเปิดโปรแกรม...
+set _MEIPASS2=
+set _MEIPASS=
 start "" "{current_exe}"
 del "%~f0"
 """
                 with open(bat_path, "w", encoding="utf-8") as f:
                     f.write(bat_content)
 
+                clean_env = os.environ.copy()
+                clean_env.pop('_MEIPASS2', None)
+                clean_env.pop('_MEIPASS', None)
+
                 subprocess.Popen(
                     ["cmd.exe", "/c", bat_path],
                     cwd=exe_dir,
+                    env=clean_env,
                     creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
                 )
                 self.after(500, self._exit_app)
