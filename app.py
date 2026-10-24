@@ -3985,7 +3985,7 @@ class ModernCustomTkinterApp:
         self.root = root
         self.root.title("CNT STAFF TIME AUTOMATION - บริษัท คริสเตียนีและนีลเส็น (ไทย) จำกัด (มหาชน) [BY WERAWAT THAMRONGDULLAPARK]")
         self.root.geometry("1220x890")
-        self.root.minsize(1040, 720)
+        self.root.minsize(960, 640)
         
         self.font_family = "Tahoma"
         self.font_scale_var = ctk.StringVar(value="100%")
@@ -4153,7 +4153,7 @@ class ModernCustomTkinterApp:
         self.color_text_muted = "#475569"    # Slate 600
 
         # -------------------------------------------------------------
-        # 1. แถบหัวเรื่องพรีเมียม (2026 Enterprise Header)
+        # 1. แถบหัวเรื่องพรีเมียม (2026 Enterprise Responsive Header)
         # -------------------------------------------------------------
         header_frame = ctk.CTkFrame(
             self.root, 
@@ -4162,15 +4162,15 @@ class ModernCustomTkinterApp:
         )
         header_frame.grid(row=0, column=0, sticky="ew")
         header_frame.grid_columnconfigure(0, weight=1)
-        
-        # แถวบน: ชื่อองค์กร (ซ้าย) + แถบเครื่องมือ 4 ปุ่ม (ขวา)
+
+        # แถว 1: อัตลักษณ์องค์กร (ซ้าย) + ตัวควบคุมระบบ & สเกลตัวอักษร (ขวา)
         header_top = ctk.CTkFrame(header_frame, fg_color="transparent")
-        header_top.pack(fill="x", padx=24, pady=(12, 6))
+        header_top.pack(fill="x", padx=20, pady=(10, 4))
         header_top.grid_columnconfigure(0, weight=1)
 
         brand_box = ctk.CTkFrame(header_top, fg_color="transparent")
         brand_box.grid(row=0, column=0, sticky="w")
-        
+
         if self.cnt_logo_img:
             logo_badge = ctk.CTkFrame(
                 brand_box,
@@ -4182,10 +4182,10 @@ class ModernCustomTkinterApp:
             logo_badge.pack(side="left", padx=(0, 12))
             lbl_logo = ctk.CTkLabel(logo_badge, text="", image=self.cnt_logo_img)
             lbl_logo.pack(padx=6, pady=3)
-            
+
         brand_text_box = ctk.CTkFrame(brand_box, fg_color="transparent")
         brand_text_box.pack(side="left")
-        
+
         lbl_brand = ctk.CTkLabel(
             brand_text_box,
             text="CHRISTIANI & NIELSEN (THAI) PCL.",
@@ -4202,90 +4202,33 @@ class ModernCustomTkinterApp:
         )
         lbl_credit.pack(anchor="w", pady=(1, 0))
 
-        toolbar_box = ctk.CTkFrame(header_top, fg_color="transparent")
-        toolbar_box.grid(row=0, column=1, sticky="e")
-
-        btn_manual = ctk.CTkButton(
-            toolbar_box,
-            text="คู่มือการใช้งาน",
-            font=self.font_btn,
-            fg_color="#1e293b",
-            hover_color="#334155",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#475569",
-            height=38,
-            corner_radius=8,
-            command=self.open_manual
-        )
-        btn_manual.grid(row=0, column=0, padx=3)
-
-        btn_analytics = ctk.CTkButton(
-            toolbar_box,
-            text="สถิติภาพรวม",
-            font=self.font_btn,
-            fg_color="#1e293b",
-            hover_color="#334155",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#475569",
-            height=38,
-            corner_radius=8,
-            command=self.open_analytics
-        )
-        btn_analytics.grid(row=0, column=1, padx=3)
-
-        btn_anomaly = ctk.CTkButton(
-            toolbar_box,
-            text="วิเคราะห์เวลาผิดปกติ",
-            font=self.font_btn,
-            fg_color="#b45309",
-            hover_color="#92400e",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#d97706",
-            height=38,
-            corner_radius=8,
-            command=self.open_anomaly_dialog
-        )
-        btn_anomaly.grid(row=0, column=2, padx=3)
-
-        btn_inspector = ctk.CTkButton(
-            toolbar_box,
-            text="ตรวจสอบรายคน",
-            font=self.font_btn,
-            fg_color="#1e293b",
-            hover_color="#334155",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#475569",
-            height=38,
-            corner_radius=8,
-            command=self.open_inspector
-        )
-        btn_inspector.grid(row=0, column=3, padx=3)
+        # แถบควบคุม Utility ประจำระบบ (ขวาบน)
+        utility_box = ctk.CTkFrame(header_top, fg_color="transparent")
+        utility_box.grid(row=0, column=1, sticky="e")
 
         self.btn_update = ctk.CTkButton(
-            toolbar_box,
+            utility_box,
             text=f"อัปเดต v{APP_VERSION}",
             font=self.font_btn,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             text_color="#ffffff",
-            height=38,
-            corner_radius=8,
+            height=32,
+            width=110,
+            corner_radius=6,
             command=self.open_updater
         )
-        self.btn_update.grid(row=0, column=4, padx=3)
+        self.btn_update.pack(side="left", padx=(0, 8))
 
         # สเกลเลอร์ปรับขนาดตัวอักษรสำหรับผู้สูงวัย / สบายตา (Senior-Friendly Accessibility Scaler - UI/UX Pro Max)
         self.seg_font = ctk.CTkSegmentedButton(
-            toolbar_box,
+            utility_box,
             values=["100%", "115%", "125%"],
             variable=self.font_scale_var,
             command=self.on_font_scale_changed,
             font=self.font_sm,
-            height=34,
+            height=32,
+            width=135,
             selected_color=self.color_primary,
             selected_hover_color=self.color_primary_hover,
             unselected_color="#1e293b",
@@ -4293,19 +4236,11 @@ class ModernCustomTkinterApp:
             text_color="#ffffff",
             dynamic_resizing=False
         )
-        self.seg_font.grid(row=0, column=5, padx=(6, 0))
+        self.seg_font.pack(side="left")
 
-        # ผูก Tooltip บน Toolbar
-        add_tooltip(btn_manual, "เปิดคู่มือการใช้งานระบบ บันทึกเวลาและการประมวลผลการลาอย่างละเอียด")
-        add_tooltip(btn_analytics, "เปิดหน้าต่างวิเคราะห์สถิติภาพรวม การมาทำงานและประเภทการลาทั้งหมด")
-        add_tooltip(btn_anomaly, "เปิดระบบวิเคราะห์เวลาผิดปกติ (ขาดสแกนขาเดียว / ไม่พบสแกนและไม่ลา)")
-        add_tooltip(btn_inspector, "เปิดระบบตรวจสอบประวัติเวลาทำงานและข้อมูลย้อนหลังรายบุคคล")
-        add_tooltip(self.btn_update, "ตรวจสอบและอัปเดตโปรแกรมเป็นเวอร์ชันล่าสุดจาก GitHub")
-        add_tooltip(self.seg_font, "ปรับขนาดตัวอักษรทั้งโปรแกรม (100% ปกติ | 115% กลาง | 125% ใหญ่พิเศษเพื่อความสบายตา)")
-
-        # แถวล่าง: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
+        # แถว 2: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
         header_title_bar = ctk.CTkFrame(header_frame, fg_color="transparent")
-        header_title_bar.pack(fill="x", padx=24, pady=(0, 8))
+        header_title_bar.pack(fill="x", padx=20, pady=(2, 4))
 
         lbl_title = ctk.CTkLabel(
             header_title_bar,
@@ -4322,6 +4257,78 @@ class ModernCustomTkinterApp:
             text_color="#cbd5e1"
         )
         lbl_subtitle.pack(anchor="w", pady=(1, 0))
+
+        # แถว 3: แถบเมนูเครื่องมือ 4 ระบบงาน (Navigation Ribbon - จัดวางอิสระ ไม่ล้นขอบ 100%)
+        toolbar_box = ctk.CTkFrame(header_frame, fg_color="transparent")
+        toolbar_box.pack(fill="x", padx=20, pady=(2, 10))
+
+        btn_manual = ctk.CTkButton(
+            toolbar_box,
+            text="คู่มือการใช้งาน",
+            font=self.font_btn,
+            fg_color="#1e293b",
+            hover_color="#334155",
+            text_color="#ffffff",
+            border_width=1,
+            border_color="#475569",
+            height=34,
+            corner_radius=6,
+            command=self.open_manual
+        )
+        btn_manual.pack(side="left", padx=(0, 6))
+
+        btn_analytics = ctk.CTkButton(
+            toolbar_box,
+            text="สถิติภาพรวม",
+            font=self.font_btn,
+            fg_color="#1e293b",
+            hover_color="#334155",
+            text_color="#ffffff",
+            border_width=1,
+            border_color="#475569",
+            height=34,
+            corner_radius=6,
+            command=self.open_analytics
+        )
+        btn_analytics.pack(side="left", padx=(0, 6))
+
+        btn_anomaly = ctk.CTkButton(
+            toolbar_box,
+            text="วิเคราะห์เวลาผิดปกติ",
+            font=self.font_btn,
+            fg_color="#b45309",
+            hover_color="#92400e",
+            text_color="#ffffff",
+            border_width=1,
+            border_color="#d97706",
+            height=34,
+            corner_radius=6,
+            command=self.open_anomaly_dialog
+        )
+        btn_anomaly.pack(side="left", padx=(0, 6))
+
+        btn_inspector = ctk.CTkButton(
+            toolbar_box,
+            text="ตรวจสอบรายคน",
+            font=self.font_btn,
+            fg_color="#1e293b",
+            hover_color="#334155",
+            text_color="#ffffff",
+            border_width=1,
+            border_color="#475569",
+            height=34,
+            corner_radius=6,
+            command=self.open_inspector
+        )
+        btn_inspector.pack(side="left", padx=(0, 6))
+
+        # ผูก Tooltip บน Toolbar และ Utility
+        add_tooltip(btn_manual, "เปิดคู่มือการใช้งานระบบ บันทึกเวลาและการประมวลผลการลาอย่างละเอียด")
+        add_tooltip(btn_analytics, "เปิดหน้าต่างวิเคราะห์สถิติภาพรวม การมาทำงานและประเภทการลาทั้งหมด")
+        add_tooltip(btn_anomaly, "เปิดระบบวิเคราะห์เวลาผิดปกติ (ขาดสแกนขาเดียว / ไม่พบสแกนและไม่ลา)")
+        add_tooltip(btn_inspector, "เปิดระบบตรวจสอบประวัติเวลาทำงานและข้อมูลย้อนหลังรายบุคคล")
+        add_tooltip(self.btn_update, "ตรวจสอบและอัปเดตโปรแกรมเป็นเวอร์ชันล่าสุดจาก GitHub")
+        add_tooltip(self.seg_font, "ปรับขนาดตัวอักษรทั้งโปรแกรม (100% ปกติ | 115% กลาง | 125% ใหญ่พิเศษเพื่อความสบายตา)")
 
         # -------------------------------------------------------------
         # 2. พื้นที่เนื้อหาหลัก (Scrollable Card Container)
@@ -4576,7 +4583,7 @@ class ModernCustomTkinterApp:
 
         lbl_cols_title = ctk.CTkLabel(
             header_cols_box,
-            text="ปรับแต่งตำแหน่งคอลัมน์เป้าหมายในไฟล์ STAFF TIME (รองรับแบบฟอร์มทุกโครงการ):",
+            text="ปรับแต่งตำแหน่งคอลัมน์เป้าหมายในไฟล์ STAFF TIME:",
             font=self.font_h2,
             text_color=self.color_text_dark
         )
@@ -4631,56 +4638,56 @@ class ModernCustomTkinterApp:
         # 1. รหัสพนักงาน
         lbl_c_emp = ctk.CTkLabel(col_inputs_frame, text="รหัสพนักงาน", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_emp.grid(row=0, column=0, pady=(10, 2))
-        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_emp.insert(0, "A")
         self.entry_col_emp.grid(row=1, column=0, pady=(0, 10))
 
         # 2. ชื่อพนักงาน
         lbl_c_name = ctk.CTkLabel(col_inputs_frame, text="ชื่อพนักงาน", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_name.grid(row=0, column=1, pady=(10, 2))
-        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_name.insert(0, "B")
         self.entry_col_name.grid(row=1, column=1, pady=(0, 10))
 
         # 3. สแกนนิ้วดิบ
         lbl_c_scan = ctk.CTkLabel(col_inputs_frame, text="สแกนดิบ", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_scan.grid(row=0, column=2, pady=(10, 2))
-        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_scan.insert(0, "E")
         self.entry_col_scan.grid(row=1, column=2, pady=(0, 10))
 
         # 4. ประเภทลา / หมายเหตุ
         lbl_c_leave = ctk.CTkLabel(col_inputs_frame, text="ประเภทลา", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_leave.grid(row=0, column=3, pady=(10, 2))
-        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_leave.insert(0, "G")
         self.entry_col_leave.grid(row=1, column=3, pady=(0, 10))
 
         # 5. เวลาเข้า
         lbl_c_in = ctk.CTkLabel(col_inputs_frame, text="เวลาเข้า (In)", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_in.grid(row=0, column=4, pady=(10, 2))
-        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_in.insert(0, "L")
         self.entry_col_in.grid(row=1, column=4, pady=(0, 10))
 
         # 6. เวลาออก
         lbl_c_out = ctk.CTkLabel(col_inputs_frame, text="เวลาออก (Out)", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_out.grid(row=0, column=5, pady=(10, 2))
-        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_out.insert(0, "M")
         self.entry_col_out.grid(row=1, column=5, pady=(0, 10))
 
         # 7. รหัสย่อ
         lbl_c_code = ctk.CTkLabel(col_inputs_frame, text="รหัสย่อ (Code)", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_code.grid(row=0, column=6, pady=(10, 2))
-        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_col_code.insert(0, "Q")
         self.entry_col_code.grid(row=1, column=6, pady=(0, 10))
 
         # 8. เริ่มแถวที่
         lbl_c_row = ctk.CTkLabel(col_inputs_frame, text="เริ่มแถวที่", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_row.grid(row=0, column=7, pady=(10, 2))
-        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
+        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=65, height=38, justify="center")
         self.entry_start_row.insert(0, "2")
         self.entry_start_row.grid(row=1, column=7, pady=(0, 10))
 
@@ -4783,7 +4790,7 @@ class ModernCustomTkinterApp:
 
         r2 = ctk.CTkRadioButton(
             save_row,
-            text="บันทึกทับไฟล์เดิม (สร้างไฟล์สำรอง _backup.xlsx ให้อัตโนมัติ)",
+            text="บันทึกทับไฟล์เดิม (สร้างสำรอง _backup.xlsx อัตโนมัติ)",
             variable=self.save_mode_var,
             value="overwrite",
             font=self.font_btn,
@@ -4871,7 +4878,7 @@ class ModernCustomTkinterApp:
 
         lbl_log_title = ctk.CTkLabel(
             log_h_box,
-            text="บันทึกสถานะการทำงาน (System Activity Log)",
+            text="บันทึกสถานะการทำงาน (Activity Log)",
             font=self.font_h2,
             text_color=self.color_text_dark
         )
