@@ -126,6 +126,93 @@ def center_window(window, width, height, parent=None):
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
+# -------------------------------------------------------------
+# ระบบคำแนะนำแบบลอยเมื่อเมาส์ชี้ (Modern Tooltip - UI/UX Pro Max)
+# -------------------------------------------------------------
+
+class ModernToolTip:
+    """กล่องคำแนะนำแบบลอยเมื่อนำเมาส์ไปชี้ (Hover Tooltip - UI/UX Pro Max)"""
+    def __init__(self, widget, text, delay=350):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.tipwindow = None
+        self.id = None
+
+        # รองรับทั้งวิดเจ็ตมาตรฐานและ CustomTkinter (เช่น CTkSegmentedButton, CTkEntry, CTkTextbox)
+        targets = []
+        if hasattr(widget, '_canvas'):
+            targets.append(widget._canvas)
+        if hasattr(widget, '_entry'):
+            targets.append(widget._entry)
+        if hasattr(widget, '_textbox'):
+            targets.append(widget._textbox)
+        if hasattr(widget, '_buttons_dict'):
+            targets.extend(widget._buttons_dict.values())
+        targets.append(widget)
+
+        for t in targets:
+            try:
+                t.bind("<Enter>", self._on_enter, add="+")
+                t.bind("<Leave>", self._on_leave, add="+")
+                t.bind("<ButtonPress>", self._on_leave, add="+")
+            except Exception:
+                pass
+
+    def _on_enter(self, event=None):
+        self._schedule()
+
+    def _on_leave(self, event=None):
+        self._unschedule()
+        self._hide()
+
+    def _schedule(self):
+        self._unschedule()
+        self.id = self.widget.after(self.delay, self._show)
+
+    def _unschedule(self):
+        tid = self.id
+        self.id = None
+        if tid:
+            try:
+                self.widget.after_cancel(tid)
+            except Exception:
+                pass
+
+    def _show(self):
+        if not self.widget.winfo_exists():
+            return
+        x = self.widget.winfo_rootx() + 10
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self.tipwindow = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        try:
+            tw.attributes("-topmost", True)
+        except Exception:
+            pass
+        frm = tk.Frame(tw, bg="#0f172a", padx=9, pady=5, relief="flat", highlightthickness=1, highlightbackground="#334155")
+        frm.pack()
+        lbl = tk.Label(frm, text=self.text, justify='left', bg="#0f172a", fg="#f8fafc", font=("Tahoma", 10, "normal"))
+        lbl.pack()
+
+    def _hide(self):
+        tw = self.tipwindow
+        self.tipwindow = None
+        if tw:
+            try:
+                tw.destroy()
+            except Exception:
+                pass
+
+
+def add_tooltip(widget, text):
+    """ฟังก์ชันผู้ช่วยผูก Tooltip เข้ากับ Widget"""
+    if widget and text:
+        return ModernToolTip(widget, text)
+    return None
+
+
 def ensure_clock_icon():
     """สร้างไฟล์ clock.ico หากยังไม่มี เพื่อใช้เป็นไอคอนประจำโปรแกรม"""
     icon_path = get_resource_path("clock.ico")
@@ -2901,7 +2988,7 @@ class AnomalyDialog(ctk.CTkToplevel):
 
         # 2. Summary KPI Cards
         self.kpi_frame = ctk.CTkFrame(self, fg_color="#f8fafc", corner_radius=0)
-        self.kpi_frame.pack(fill="x", padx=16, pady=(12, 6))
+        self.kpi_frame.pack(fill="x", padx=16, pady=(12, 4))
         for i in range(4):
             self.kpi_frame.grid_columnconfigure(i, weight=1)
 
@@ -2909,6 +2996,21 @@ class AnomalyDialog(ctk.CTkToplevel):
         self.lbl_kpi_punch = self._create_kpi_card(self.kpi_frame, 1, "ลืมสแกน (ขาเดียว)", "-", "#b91c1c", "#fef2f2")
         self.lbl_kpi_absent = self._create_kpi_card(self.kpi_frame, 2, "ไม่พบสแกนและไม่ลา", "-", "#c2410c", "#fff7ed")
         self.lbl_kpi_sheets = self._create_kpi_card(self.kpi_frame, 3, "จำนวนวันที่ตรวจพบ", "-", "#0369a1", "#f0f9ff")
+
+        # 2.5 Visual Attendance Distribution Gauge (UI/UX Pro Max)
+        self.gauge_frame = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=10, border_width=1, border_color="#cbd5e1")
+        self.gauge_frame.pack(fill="x", padx=16, pady=(4, 6))
+
+        gf_top = ctk.CTkFrame(self.gauge_frame, fg_color="transparent")
+        gf_top.pack(fill="x", padx=12, pady=(8, 4))
+        lbl_g_title = ctk.CTkLabel(gf_top, text="📊 สัดส่วนความสมบูรณ์ของเวลาทำงาน (Attendance Health Gauge)", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color="#0f172a")
+        lbl_g_title.pack(side="left")
+        self.lbl_gauge_pct = ctk.CTkLabel(gf_top, text="กำลังวิเคราะห์ข้อมูล...", font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"), text_color="#475569")
+        self.lbl_gauge_pct.pack(side="right")
+
+        self.bar_bg = ctk.CTkFrame(self.gauge_frame, fg_color="#e2e8f0", height=14, corner_radius=7)
+        self.bar_bg.pack(fill="x", padx=12, pady=(0, 8))
+        self.bar_bg.pack_propagate(False)
 
         # 3. Filter & Controls Bar
         ctrl_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -2997,6 +3099,13 @@ class AnomalyDialog(ctk.CTkToplevel):
         )
         btn_close.pack(side="right")
 
+        # ผูก Tooltip (UI/UX Pro Max)
+        add_tooltip(self.btn_f_all, "แสดงรายการความผิดปกติทั้งหมดที่ตรวจพบ")
+        add_tooltip(self.btn_f_punch, "กรองเฉพาะพนักงานที่มีสแกนนิ้วเพียงขาเดียว (ขาดเช้าหรือขาดเย็น)")
+        add_tooltip(self.btn_f_absent, "กรองเฉพาะพนักงานที่ไม่มีสแกนนิ้วเลย และไม่ได้ลงวันลา")
+        add_tooltip(btn_export, "ส่งออกรายงานสรุปความผิดปกติเป็นไฟล์ Excel พร้อมคำแนะนำการแก้ไข")
+        add_tooltip(btn_close, "ปิดหน้าต่างวิเคราะห์เวลาผิดปกติ")
+
     def _create_kpi_card(self, parent, col, title, initial_val, text_col, bg_col):
         card = ctk.CTkFrame(parent, fg_color=bg_col, corner_radius=10, border_width=1, border_color="#cbd5e1")
         card.grid(row=0, column=col, padx=5, pady=4, sticky="nsew")
@@ -3016,9 +3125,42 @@ class AnomalyDialog(ctk.CTkToplevel):
         counts = res.get('counts', {})
         self.anomalies_data = res.get('anomalies', [])
 
-        self.lbl_kpi_total.configure(text=f"{counts.get('total', 0):,} จุด")
-        self.lbl_kpi_punch.configure(text=f"{counts.get('missing_punch', 0):,} คน")
-        self.lbl_kpi_absent.configure(text=f"{counts.get('unrecorded_absence', 0):,} จุด")
+        total = counts.get('total', 0)
+        missing_punch = counts.get('missing_punch', 0)
+        unrecorded = counts.get('unrecorded_absence', 0)
+
+        self.lbl_kpi_total.configure(text=f"{total:,} จุด")
+        self.lbl_kpi_punch.configure(text=f"{missing_punch:,} คน")
+        self.lbl_kpi_absent.configure(text=f"{unrecorded:,} จุด")
+
+        # อัปเดตแถบสัดส่วนความสมบูรณ์ของเวลาทำงาน (Visual Attendance Distribution Gauge)
+        for c in self.bar_bg.winfo_children():
+            try:
+                c.destroy()
+            except Exception:
+                pass
+        if total > 0:
+            pct_punch = (missing_punch / total) * 100
+            pct_absent = (unrecorded / total) * 100
+            self.lbl_gauge_pct.configure(
+                text=f"ลืมสแกนขาเดียว: {missing_punch} จุด ({pct_punch:.1f}%)  |  ไม่พบสแกน/ไม่ลา: {unrecorded} จุด ({pct_absent:.1f}%)",
+                text_color="#0f172a"
+            )
+            w_punch = missing_punch / total
+            w_absent = unrecorded / total
+            if w_punch > 0:
+                f_p = ctk.CTkFrame(self.bar_bg, fg_color="#dc2626", corner_radius=0, height=14)
+                f_p.place(relx=0, rely=0, relwidth=w_punch, relheight=1.0)
+            if w_absent > 0:
+                f_a = ctk.CTkFrame(self.bar_bg, fg_color="#ea580c", corner_radius=0, height=14)
+                f_a.place(relx=w_punch, rely=0, relwidth=w_absent, relheight=1.0)
+        else:
+            self.lbl_gauge_pct.configure(
+                text="ข้อมูลเวลาทำงานถูกต้องสมบูรณ์ 100% (ไม่พบจุดผิดปกติ)",
+                text_color="#15803d"
+            )
+            f_ok = ctk.CTkFrame(self.bar_bg, fg_color="#16a34a", corner_radius=7, height=14)
+            f_ok.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
 
         # Distinct sheets
         distinct_sheets = len(set(a['sheet'] for a in self.anomalies_data))
@@ -3846,6 +3988,18 @@ class ModernCustomTkinterApp:
         self.root.minsize(1040, 720)
         
         self.font_family = "Tahoma"
+        self.font_scale_var = ctk.StringVar(value="100%")
+        self.font_scale = 1.0
+
+        # ตัวแปรฟอนต์มาตรฐานสำหรับระบบ Senior-Friendly Dynamic Font Scaler (UI/UX Pro Max)
+        self.font_title = ctk.CTkFont(family=self.font_family, size=20, weight="bold")
+        self.font_h2 = ctk.CTkFont(family=self.font_family, size=14, weight="bold")
+        self.font_body = ctk.CTkFont(family=self.font_family, size=13)
+        self.font_btn = ctk.CTkFont(family=self.font_family, size=13, weight="bold")
+        self.font_sm = ctk.CTkFont(family=self.font_family, size=11, weight="bold")
+        self.font_cta = ctk.CTkFont(family=self.font_family, size=18, weight="bold")
+
+        self.current_toast = None
         self.output_file = None
         self.report_file = None
         self.is_processing = False
@@ -3892,6 +4046,90 @@ class ModernCustomTkinterApp:
 
         # ตรวจสอบการอัปเดตแบบเบื้องหลัง (Background update check)
         self.root.after(2000, self.start_silent_update_check)
+
+    def on_font_scale_changed(self, val):
+        """จัดการเมื่อผู้ใช้เปลี่ยนสเกลตัวอักษร [100% | 115% | 125%]"""
+        mapping = {"100%": 1.0, "115%": 1.15, "125%": 1.25}
+        scale = mapping.get(val, 1.0)
+        self._apply_font_scale(scale)
+        self.save_current_settings()
+        self.show_toast(f"ปรับขนาดตัวอักษรเป็น {val}", "info")
+
+    def _apply_font_scale(self, scale):
+        """คำนวณและอัปเดตขนาดตัวอักษรทุกตัวแปรฟอนต์แบบเรียลไทม์ (Senior-Friendly)"""
+        self.font_scale = scale
+        self.font_title.configure(size=int(20 * scale))
+        self.font_h2.configure(size=int(14 * scale))
+        self.font_body.configure(size=int(13 * scale))
+        self.font_btn.configure(size=int(13 * scale))
+        self.font_sm.configure(size=int(11 * scale))
+        self.font_cta.configure(size=int(18 * scale))
+
+    def show_toast(self, message, toast_type="info", duration_ms=2500):
+        """ระบบการ์ดแจ้งเตือนแบบไม่ขัดจังหวะ (Non-blocking Toast Notification - UI/UX Pro Max)"""
+        try:
+            if self.current_toast:
+                self.current_toast.destroy()
+                self.current_toast = None
+        except Exception:
+            pass
+
+        theme = {
+            "success": ("#10b981", "#ffffff", "✅"),
+            "info": ("#2563eb", "#ffffff", "ℹ️"),
+            "warning": ("#f59e0b", "#ffffff", "⚠️"),
+            "error": ("#ef4444", "#ffffff", "❌")
+        }
+        bg_col, fg_col, icon = theme.get(toast_type, ("#1e293b", "#ffffff", "🔔"))
+
+        toast = ctk.CTkFrame(
+            self.root,
+            fg_color=bg_col,
+            corner_radius=10,
+            border_width=1,
+            border_color="#ffffff"
+        )
+        toast.place(relx=0.98, rely=0.94, anchor="se")
+        self.current_toast = toast
+
+        content_box = ctk.CTkFrame(toast, fg_color="transparent")
+        content_box.pack(padx=16, pady=9)
+
+        lbl_ico = ctk.CTkLabel(content_box, text=icon, font=ctk.CTkFont(size=14))
+        lbl_ico.pack(side="left", padx=(0, 8))
+
+        lbl_txt = ctk.CTkLabel(
+            content_box,
+            text=message,
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            text_color=fg_col
+        )
+        lbl_txt.pack(side="left")
+
+        def _fade_out():
+            try:
+                if self.current_toast == toast:
+                    toast.destroy()
+                    self.current_toast = None
+            except Exception:
+                pass
+
+        self.root.after(duration_ms, _fade_out)
+
+    def _flash_card(self, card):
+        """สร้างเอฟเฟกต์ไฮไลต์ขอบการ์ดเมื่อลากไฟล์มาวาง (Visual Drag & Drop Feedback)"""
+        if not card:
+            return
+        try:
+            card.configure(border_color="#2563eb", border_width=2.5)
+            def _reset():
+                try:
+                    card.configure(border_color=self.color_border, border_width=1.5)
+                except Exception:
+                    pass
+            self.root.after(750, _reset)
+        except Exception:
+            pass
 
     def setup_ui(self):
         self.root.grid_columnconfigure(0, weight=1)
@@ -3951,7 +4189,7 @@ class ModernCustomTkinterApp:
         lbl_brand = ctk.CTkLabel(
             brand_text_box,
             text="CHRISTIANI & NIELSEN (THAI) PCL.",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            font=self.font_h2,
             text_color="#ffffff"
         )
         lbl_brand.pack(anchor="w")
@@ -3959,7 +4197,7 @@ class ModernCustomTkinterApp:
         lbl_credit = ctk.CTkLabel(
             brand_text_box,
             text="STAFF TIME SUITE  |  BY WERAWAT THAMRONGDULLAPARK",
-            font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"),
+            font=self.font_sm,
             text_color="#93c5fd"
         )
         lbl_credit.pack(anchor="w", pady=(1, 0))
@@ -3970,7 +4208,7 @@ class ModernCustomTkinterApp:
         btn_manual = ctk.CTkButton(
             toolbar_box,
             text="คู่มือการใช้งาน",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color="#1e293b",
             hover_color="#334155",
             text_color="#ffffff",
@@ -3980,12 +4218,12 @@ class ModernCustomTkinterApp:
             corner_radius=8,
             command=self.open_manual
         )
-        btn_manual.grid(row=0, column=0, padx=4)
+        btn_manual.grid(row=0, column=0, padx=3)
 
         btn_analytics = ctk.CTkButton(
             toolbar_box,
             text="สถิติภาพรวม",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color="#1e293b",
             hover_color="#334155",
             text_color="#ffffff",
@@ -4000,7 +4238,7 @@ class ModernCustomTkinterApp:
         btn_anomaly = ctk.CTkButton(
             toolbar_box,
             text="วิเคราะห์เวลาผิดปกติ",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color="#b45309",
             hover_color="#92400e",
             text_color="#ffffff",
@@ -4015,7 +4253,7 @@ class ModernCustomTkinterApp:
         btn_inspector = ctk.CTkButton(
             toolbar_box,
             text="ตรวจสอบรายคน",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color="#1e293b",
             hover_color="#334155",
             text_color="#ffffff",
@@ -4030,7 +4268,7 @@ class ModernCustomTkinterApp:
         self.btn_update = ctk.CTkButton(
             toolbar_box,
             text=f"อัปเดต v{APP_VERSION}",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             text_color="#ffffff",
@@ -4040,6 +4278,31 @@ class ModernCustomTkinterApp:
         )
         self.btn_update.grid(row=0, column=4, padx=3)
 
+        # สเกลเลอร์ปรับขนาดตัวอักษรสำหรับผู้สูงวัย / สบายตา (Senior-Friendly Accessibility Scaler - UI/UX Pro Max)
+        self.seg_font = ctk.CTkSegmentedButton(
+            toolbar_box,
+            values=["100%", "115%", "125%"],
+            variable=self.font_scale_var,
+            command=self.on_font_scale_changed,
+            font=self.font_sm,
+            height=34,
+            selected_color=self.color_primary,
+            selected_hover_color=self.color_primary_hover,
+            unselected_color="#1e293b",
+            unselected_hover_color="#334155",
+            text_color="#ffffff",
+            dynamic_resizing=False
+        )
+        self.seg_font.grid(row=0, column=5, padx=(6, 0))
+
+        # ผูก Tooltip บน Toolbar
+        add_tooltip(btn_manual, "เปิดคู่มือการใช้งานระบบ บันทึกเวลาและการประมวลผลการลาอย่างละเอียด")
+        add_tooltip(btn_analytics, "เปิดหน้าต่างวิเคราะห์สถิติภาพรวม การมาทำงานและประเภทการลาทั้งหมด")
+        add_tooltip(btn_anomaly, "เปิดระบบวิเคราะห์เวลาผิดปกติ (ขาดสแกนขาเดียว / ไม่พบสแกนและไม่ลา)")
+        add_tooltip(btn_inspector, "เปิดระบบตรวจสอบประวัติเวลาทำงานและข้อมูลย้อนหลังรายบุคคล")
+        add_tooltip(self.btn_update, "ตรวจสอบและอัปเดตโปรแกรมเป็นเวอร์ชันล่าสุดจาก GitHub")
+        add_tooltip(self.seg_font, "ปรับขนาดตัวอักษรทั้งโปรแกรม (100% ปกติ | 115% กลาง | 125% ใหญ่พิเศษเพื่อความสบายตา)")
+
         # แถวล่าง: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
         header_title_bar = ctk.CTkFrame(header_frame, fg_color="transparent")
         header_title_bar.pack(fill="x", padx=24, pady=(0, 8))
@@ -4047,7 +4310,7 @@ class ModernCustomTkinterApp:
         lbl_title = ctk.CTkLabel(
             header_title_bar,
             text="ระบบบันทึกเวลาทำงานและประมวลผลการลาอัตโนมัติ (STAFF TIME)",
-            font=ctk.CTkFont(family=self.font_family, size=20, weight="bold"),
+            font=self.font_title,
             text_color="#ffffff"
         )
         lbl_title.pack(anchor="w")
@@ -4055,7 +4318,7 @@ class ModernCustomTkinterApp:
         lbl_subtitle = ctk.CTkLabel(
             header_title_bar,
             text="ระบบมาตรฐานส่วนกลางสำหรับทุกโครงการและทุกหน่วยงานของ CNT ทั่วประเทศ (Universal Edition)",
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.font_body,
             text_color="#cbd5e1"
         )
         lbl_subtitle.pack(anchor="w", pady=(1, 0))
@@ -4072,24 +4335,24 @@ class ModernCustomTkinterApp:
         main_scroll.grid_columnconfigure(0, weight=1)
 
         # CARD 1: ไฟล์รายงาน STAFF TIME (.xlsx) - Compact
-        card_main = ctk.CTkFrame(
+        self.card_main = ctk.CTkFrame(
             main_scroll,
             corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_main.grid(row=0, column=0, sticky="ew", pady=(0, 6), padx=4)
-        card_main.grid_columnconfigure(1, weight=1)
+        self.card_main.grid(row=0, column=0, sticky="ew", pady=(0, 6), padx=4)
+        self.card_main.grid_columnconfigure(1, weight=1)
 
-        c1_row = ctk.CTkFrame(card_main, fg_color="transparent")
+        c1_row = ctk.CTkFrame(self.card_main, fg_color="transparent")
         c1_row.pack(fill="x", padx=14, pady=8)
         c1_row.grid_columnconfigure(1, weight=1)
 
         badge_c1 = ctk.CTkLabel(
             c1_row,
             text="ขั้นตอนที่ 1",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_primary,
             text_color="#ffffff",
             corner_radius=6,
@@ -4101,7 +4364,7 @@ class ModernCustomTkinterApp:
         self.txt_main = ctk.CTkEntry(
             c1_row,
             placeholder_text="คลิกปุ่มด้านขวา หรือ ลากไฟล์ STAFF TIME ประจำงวด (.xlsx) มาวางที่นี่...",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            font=self.font_body,
             height=38,
             corner_radius=8,
             border_color="#cbd5e1",
@@ -4112,7 +4375,7 @@ class ModernCustomTkinterApp:
         btn_browse_main = ctk.CTkButton(
             c1_row,
             text="เลือกไฟล์ STAFF TIME...",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             height=38,
@@ -4122,25 +4385,28 @@ class ModernCustomTkinterApp:
         )
         btn_browse_main.grid(row=0, column=2)
 
+        add_tooltip(self.txt_main, "ช่องระบุที่อยู่ไฟล์ STAFF TIME (.xlsx) - สามารถคลิกเลือกหรือลากไฟล์มาวางได้โดยตรง")
+        add_tooltip(btn_browse_main, "คลิกเพื่อค้นหาและเลือกไฟล์รายงาน STAFF TIME ประจำงวด (.xlsx)")
+
         # CARD 2: ข้อมูลนำเข้า 2 แหล่ง (การลาที่ได้รับการอนุมัติ & ใบแจ้งการมาทำงาน) - Compact Single-Level
-        card_sources = ctk.CTkFrame(
+        self.card_sources = ctk.CTkFrame(
             main_scroll,
             corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_sources.grid(row=1, column=0, sticky="ew", pady=(0, 6), padx=4)
-        card_sources.grid_columnconfigure(0, weight=1)
+        self.card_sources.grid(row=1, column=0, sticky="ew", pady=(0, 6), padx=4)
+        self.card_sources.grid_columnconfigure(0, weight=1)
 
         # แถบหัวข้อ Card 2 (กะทัดรัด)
-        c2_head = ctk.CTkFrame(card_sources, fg_color="transparent")
+        c2_head = ctk.CTkFrame(self.card_sources, fg_color="transparent")
         c2_head.pack(fill="x", padx=14, pady=(6, 2))
 
         badge_c2 = ctk.CTkLabel(
             c2_head,
             text="ขั้นตอนที่ 2",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_primary,
             text_color="#ffffff",
             corner_radius=6,
@@ -4152,20 +4418,20 @@ class ModernCustomTkinterApp:
         lbl_c2_title = ctk.CTkLabel(
             c2_head,
             text="ไฟล์นำเข้าข้อมูล (วันลาที่ได้รับอนุมัติ และ/หรือ ใบแจ้งเวลาทำงานจาก CNTIWEB)",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            font=self.font_h2,
             text_color=self.color_text_dark
         )
         lbl_c2_title.pack(side="left")
 
         # 2.1 แถวข้อมูลวันลา (Row 1)
-        r_leave = ctk.CTkFrame(card_sources, fg_color="transparent")
+        r_leave = ctk.CTkFrame(self.card_sources, fg_color="transparent")
         r_leave.pack(fill="x", padx=14, pady=(2, 3))
         r_leave.grid_columnconfigure(1, weight=1)
 
         badge_leave = ctk.CTkLabel(
             r_leave,
             text="ข้อมูลวันลา",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_accent,
             text_color="#ffffff",
             corner_radius=6,
@@ -4177,7 +4443,7 @@ class ModernCustomTkinterApp:
         self.txt_appr = ctk.CTkEntry(
             r_leave,
             placeholder_text="คลิกเลือก หรือลากไฟล์การลาที่ได้รับอนุมัติ (เช่น อนุมัติ.xlsx)...",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            font=self.font_body,
             height=36,
             corner_radius=8,
             border_color="#cbd5e1",
@@ -4188,7 +4454,7 @@ class ModernCustomTkinterApp:
         btn_browse_appr = ctk.CTkButton(
             r_leave,
             text="เลือกไฟล์วันลา...",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color=self.color_accent,
             hover_color=self.color_accent_hover,
             height=36,
@@ -4201,7 +4467,7 @@ class ModernCustomTkinterApp:
         btn_clear_appr = ctk.CTkButton(
             r_leave,
             text="ล้าง",
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.font_sm,
             fg_color="#e2e8f0",
             hover_color="#cbd5e1",
             text_color="#334155",
@@ -4213,14 +4479,14 @@ class ModernCustomTkinterApp:
         btn_clear_appr.grid(row=0, column=3)
 
         # 2.2 แถวใบแจ้งเวลาทำงาน (Row 2)
-        r_att = ctk.CTkFrame(card_sources, fg_color="transparent")
+        r_att = ctk.CTkFrame(self.card_sources, fg_color="transparent")
         r_att.pack(fill="x", padx=14, pady=(2, 8))
         r_att.grid_columnconfigure(1, weight=1)
 
         badge_att = ctk.CTkLabel(
             r_att,
             text="ใบแจ้งเวลา",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_emerald,
             text_color="#ffffff",
             corner_radius=6,
@@ -4232,7 +4498,7 @@ class ModernCustomTkinterApp:
         self.txt_att = ctk.CTkEntry(
             r_att,
             placeholder_text="คลิกเลือก หรือลากไฟล์ใบแจ้งการมาทำงาน / ลืมสแกนนิ้ว (ถ้ามี)...",
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            font=self.font_body,
             height=36,
             corner_radius=8,
             border_color="#cbd5e1",
@@ -4243,7 +4509,7 @@ class ModernCustomTkinterApp:
         btn_browse_att = ctk.CTkButton(
             r_att,
             text="เลือกใบแจ้งเวลา...",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
             height=36,
@@ -4256,7 +4522,7 @@ class ModernCustomTkinterApp:
         btn_clear_att = ctk.CTkButton(
             r_att,
             text="ล้าง",
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.font_sm,
             fg_color="#e2e8f0",
             hover_color="#cbd5e1",
             text_color="#334155",
@@ -4267,22 +4533,29 @@ class ModernCustomTkinterApp:
         )
         btn_clear_att.grid(row=0, column=3)
 
+        add_tooltip(self.txt_appr, "ช่องระบุไฟล์รายงานการลาที่ได้รับอนุมัติจาก CNTIWEB (.xlsx / .csv)")
+        add_tooltip(btn_browse_appr, "เลือกไฟล์การลาที่ได้รับอนุมัติจากระบบ CNTIWEB")
+        add_tooltip(btn_clear_appr, "ล้างไฟล์การลาที่เลือกออก")
+        add_tooltip(self.txt_att, "ช่องระบุไฟล์ใบแจ้งการมาทำงาน / ลืมสแกนนิ้ว จาก CNTIWEB (.xlsx / .csv)")
+        add_tooltip(btn_browse_att, "เลือกไฟล์ใบแจ้งเวลาทำงาน / ลืมสแกนนิ้ว")
+        add_tooltip(btn_clear_att, "ล้างไฟล์ใบแจ้งเวลาทำงานที่เลือกออก")
+
         # CARD 3: กำหนดช่องคอลัมน์เป้าหมายในไฟล์ STAFF TIME (Universal)
-        card_cols = ctk.CTkFrame(
+        self.card_cols = ctk.CTkFrame(
             main_scroll,
             corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_cols.grid(row=2, column=0, sticky="ew", pady=(0, 6), padx=4)
+        self.card_cols.grid(row=2, column=0, sticky="ew", pady=(0, 6), padx=4)
 
         self.cols_expanded = False
 
         self.btn_toggle_cols = ctk.CTkButton(
-            card_cols,
+            self.card_cols,
             text="[+]  การกำหนดตำแหน่งคอลัมน์ในไฟล์ STAFF TIME (คลิกเพื่อเปิดแก้ไข  |  ค่ามาตรฐาน: A, B, E, G, L, M, Q, แถว 2)",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             fg_color="#f8fafc",
             hover_color="#f1f5f9",
             text_color=self.color_primary,
@@ -4295,7 +4568,7 @@ class ModernCustomTkinterApp:
         )
         self.btn_toggle_cols.pack(fill="x", padx=10, pady=6)
 
-        self.frame_cols_body = ctk.CTkFrame(card_cols, fg_color="transparent")
+        self.frame_cols_body = ctk.CTkFrame(self.card_cols, fg_color="transparent")
 
         header_cols_box = ctk.CTkFrame(self.frame_cols_body, fg_color="transparent")
         header_cols_box.pack(fill="x", padx=10, pady=(6, 4))
@@ -4304,7 +4577,7 @@ class ModernCustomTkinterApp:
         lbl_cols_title = ctk.CTkLabel(
             header_cols_box,
             text="ปรับแต่งตำแหน่งคอลัมน์เป้าหมายในไฟล์ STAFF TIME (รองรับแบบฟอร์มทุกโครงการ):",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            font=self.font_h2,
             text_color=self.color_text_dark
         )
         lbl_cols_title.grid(row=0, column=0, sticky="w")
@@ -4315,7 +4588,7 @@ class ModernCustomTkinterApp:
         btn_save_cols = ctk.CTkButton(
             btn_box_cols,
             text="บันทึกตำแหน่งคอลัมน์",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
             text_color="#ffffff",
@@ -4329,7 +4602,7 @@ class ModernCustomTkinterApp:
         btn_reset_cols = ctk.CTkButton(
             btn_box_cols,
             text="คืนค่ามาตรฐาน",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color="#f1f5f9",
             hover_color="#e2e8f0",
             text_color=self.color_primary,
@@ -4345,7 +4618,7 @@ class ModernCustomTkinterApp:
         lbl_cols_hint = ctk.CTkLabel(
             self.frame_cols_body,
             text="* สามารถแก้ไขตัวอักษรช่องคอลัมน์ได้ทันที หากตารางข้อมูลของแต่ละโครงการหรือแต่ละหน่วยงานอยู่คนละช่องกัน (ช่อง B ใช้ทำ Double-Check ชื่อพนักงาน)",
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.font_sm,
             text_color=self.color_text_muted
         )
         lbl_cols_hint.pack(anchor="w", padx=10, pady=(0, 10))
@@ -4356,60 +4629,72 @@ class ModernCustomTkinterApp:
             col_inputs_frame.grid_columnconfigure(col_i, weight=1)
 
         # 1. รหัสพนักงาน
-        lbl_c_emp = ctk.CTkLabel(col_inputs_frame, text="รหัสพนักงาน", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_emp = ctk.CTkLabel(col_inputs_frame, text="รหัสพนักงาน", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_emp.grid(row=0, column=0, pady=(10, 2))
-        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_emp.insert(0, "A")
         self.entry_col_emp.grid(row=1, column=0, pady=(0, 10))
 
         # 2. ชื่อพนักงาน
-        lbl_c_name = ctk.CTkLabel(col_inputs_frame, text="ชื่อพนักงาน", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_name = ctk.CTkLabel(col_inputs_frame, text="ชื่อพนักงาน", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_name.grid(row=0, column=1, pady=(10, 2))
-        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_name.insert(0, "B")
         self.entry_col_name.grid(row=1, column=1, pady=(0, 10))
 
         # 3. สแกนนิ้วดิบ
-        lbl_c_scan = ctk.CTkLabel(col_inputs_frame, text="สแกนดิบ", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_scan = ctk.CTkLabel(col_inputs_frame, text="สแกนดิบ", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_scan.grid(row=0, column=2, pady=(10, 2))
-        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_scan.insert(0, "E")
         self.entry_col_scan.grid(row=1, column=2, pady=(0, 10))
 
         # 4. ประเภทลา / หมายเหตุ
-        lbl_c_leave = ctk.CTkLabel(col_inputs_frame, text="ประเภทลา", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_leave = ctk.CTkLabel(col_inputs_frame, text="ประเภทลา", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_leave.grid(row=0, column=3, pady=(10, 2))
-        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_leave.insert(0, "G")
         self.entry_col_leave.grid(row=1, column=3, pady=(0, 10))
 
         # 5. เวลาเข้า
-        lbl_c_in = ctk.CTkLabel(col_inputs_frame, text="เวลาเข้า (In)", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_in = ctk.CTkLabel(col_inputs_frame, text="เวลาเข้า (In)", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_in.grid(row=0, column=4, pady=(10, 2))
-        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_in.insert(0, "L")
         self.entry_col_in.grid(row=1, column=4, pady=(0, 10))
 
         # 6. เวลาออก
-        lbl_c_out = ctk.CTkLabel(col_inputs_frame, text="เวลาออก (Out)", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_out = ctk.CTkLabel(col_inputs_frame, text="เวลาออก (Out)", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_out.grid(row=0, column=5, pady=(10, 2))
-        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_out.insert(0, "M")
         self.entry_col_out.grid(row=1, column=5, pady=(0, 10))
 
         # 7. รหัสย่อ
-        lbl_c_code = ctk.CTkLabel(col_inputs_frame, text="รหัสย่อ (Code)", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_code = ctk.CTkLabel(col_inputs_frame, text="รหัสย่อ (Code)", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_code.grid(row=0, column=6, pady=(10, 2))
-        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_col_code.insert(0, "Q")
         self.entry_col_code.grid(row=1, column=6, pady=(0, 10))
 
         # 8. เริ่มแถวที่
-        lbl_c_row = ctk.CTkLabel(col_inputs_frame, text="เริ่มแถวที่", font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"), text_color=self.color_text_dark)
+        lbl_c_row = ctk.CTkLabel(col_inputs_frame, text="เริ่มแถวที่", font=self.font_sm, text_color=self.color_text_dark)
         lbl_c_row.grid(row=0, column=7, pady=(10, 2))
-        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"), width=70, height=40, justify="center")
+        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=self.font_h2, width=70, height=40, justify="center")
         self.entry_start_row.insert(0, "2")
         self.entry_start_row.grid(row=1, column=7, pady=(0, 10))
+
+        add_tooltip(self.btn_toggle_cols, "คลิกเพื่อเปิด/ปิด แผงกำหนดตำแหน่งคอลัมน์ในไฟล์ STAFF TIME")
+        add_tooltip(btn_save_cols, "บันทึกตำแหน่งคอลัมน์เหล่านี้ไว้ถาวร (ระบบจะจำไว้ใช้ในครั้งต่อไป)")
+        add_tooltip(btn_reset_cols, "คืนค่าตำแหน่งคอลัมน์กลับเป็นค่ามาตรฐาน (A, B, E, G, L, M, Q, แถว 2)")
+        add_tooltip(self.entry_col_emp, "คอลัมน์รหัสพนักงาน (ค่ามาตรฐาน: A)")
+        add_tooltip(self.entry_col_name, "คอลัมน์ชื่อ-นามสกุลพนักงาน (ค่ามาตรฐาน: B)")
+        add_tooltip(self.entry_col_scan, "คอลัมน์บันทึกเวลาสแกนนิ้วดิบ (ค่ามาตรฐาน: E)")
+        add_tooltip(self.entry_col_leave, "คอลัมน์ประเภทการลา / เหตุผล (ค่ามาตรฐาน: G)")
+        add_tooltip(self.entry_col_in, "คอลัมน์เวลาเข้างานที่บันทึก (ค่ามาตรฐาน: L)")
+        add_tooltip(self.entry_col_out, "คอลัมน์เวลาเลิกงานที่บันทึก (ค่ามาตรฐาน: M)")
+        add_tooltip(self.entry_col_code, "คอลัมน์รหัสย่อการลา (ค่ามาตรฐาน: Q)")
+        add_tooltip(self.entry_start_row, "แถวเริ่มต้นของข้อมูลพนักงานคนแรกในไฟล์ STAFF TIME (ค่ามาตรฐาน: 2)")
 
         # ผูก Event บันทึกอัตโนมัติทันทีที่พิมพ์หรือเปลี่ยนช่อง
         for entry_w in [self.entry_col_emp, self.entry_col_name, self.entry_col_scan,
@@ -4425,14 +4710,14 @@ class ModernCustomTkinterApp:
         lbl_repo = ctk.CTkLabel(
             repo_bar,
             text="ระบบอัปเดตอัตโนมัติ (GitHub Repository):",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             text_color=self.color_text_dark
         )
         lbl_repo.pack(side="left", padx=(14, 8), pady=8)
 
         self.entry_github_repo = ctk.CTkEntry(
             repo_bar,
-            font=ctk.CTkFont(family=self.font_family, size=13),
+            font=self.font_body,
             width=280,
             height=36,
             fg_color="#f8fafc",
@@ -4444,7 +4729,7 @@ class ModernCustomTkinterApp:
         btn_save_repo = ctk.CTkButton(
             repo_bar,
             text="บันทึก Repo",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             text_color="#ffffff",
@@ -4454,24 +4739,25 @@ class ModernCustomTkinterApp:
             command=self.save_github_repo_from_entry
         )
         btn_save_repo.pack(side="left", padx=(4, 10), pady=8)
+        add_tooltip(btn_save_repo, "บันทึก GitHub Repository สำหรับระบบอัปเดตอัตโนมัติ")
 
         # CARD 4: รูปแบบการบันทึกไฟล์ (Save Options - Single Line Compact)
-        card_save = ctk.CTkFrame(
+        self.card_save = ctk.CTkFrame(
             main_scroll,
             corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_save.grid(row=3, column=0, sticky="ew", pady=(0, 6), padx=4)
+        self.card_save.grid(row=3, column=0, sticky="ew", pady=(0, 6), padx=4)
 
-        save_row = ctk.CTkFrame(card_save, fg_color="transparent")
+        save_row = ctk.CTkFrame(self.card_save, fg_color="transparent")
         save_row.pack(fill="x", padx=14, pady=6)
 
         badge_c4 = ctk.CTkLabel(
             save_row,
             text="การบันทึกไฟล์",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color="#475569",
             text_color="#ffffff",
             corner_radius=6,
@@ -4487,7 +4773,7 @@ class ModernCustomTkinterApp:
             text="สร้างไฟล์ใหม่ (_updated_วันที่ - แนะนำ)",
             variable=self.save_mode_var,
             value="new_file",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             radiobutton_width=20,
             radiobutton_height=20,
             fg_color=self.color_primary,
@@ -4500,13 +4786,16 @@ class ModernCustomTkinterApp:
             text="บันทึกทับไฟล์เดิม (สร้างไฟล์สำรอง _backup.xlsx ให้อัตโนมัติ)",
             variable=self.save_mode_var,
             value="overwrite",
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+            font=self.font_btn,
             radiobutton_width=20,
             radiobutton_height=20,
             fg_color=self.color_primary,
             command=self.save_current_settings
         )
         r2.pack(side="left")
+
+        add_tooltip(r1, "สร้างไฟล์ใหม่โดยต่อท้ายชื่อเดิมด้วย _updated_วันที่ ปลอดภัยต่อไฟล์ต้นฉบับ (แนะนำ)")
+        add_tooltip(r2, "บันทึกทับไฟล์เดิมโดยตรง โดยระบบจะสร้างไฟล์สำรอง _backup.xlsx ป้องกันข้อมูลสูญหาย")
 
         # 5. ปุ่มแอคชันหลัก: ตรวจสอบรายการแก้ไข & ปุ่มเริ่มประมวลผล (Compact & Senior-Friendly)
         action_frame = ctk.CTkFrame(main_scroll, fg_color="transparent")
@@ -4516,7 +4805,7 @@ class ModernCustomTkinterApp:
         self.btn_preview = ctk.CTkButton(
             action_frame,
             text="ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง (Pre-Check Preview)",
-            font=ctk.CTkFont(family=self.font_family, size=15, weight="bold"),
+            font=self.font_h2,
             fg_color=self.color_accent,
             hover_color=self.color_accent_hover,
             height=42,
@@ -4528,7 +4817,7 @@ class ModernCustomTkinterApp:
         self.btn_process = ctk.CTkButton(
             action_frame,
             text="เริ่มประมวลผลและบันทึกข้อมูลลงไฟล์ STAFF TIME ทันที",
-            font=ctk.CTkFont(family=self.font_family, size=18, weight="bold"),
+            font=self.font_cta,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
             height=52,
@@ -4536,6 +4825,9 @@ class ModernCustomTkinterApp:
             command=self.start_processing_thread
         )
         self.btn_process.grid(row=1, column=0, sticky="ew", pady=(0, 5))
+
+        add_tooltip(self.btn_preview, "จำลองการประมวลผลเพื่อตรวจสอบรายการแก้ไขทุกจุดแบบละเอียดก่อนบันทึกลงไฟล์จริง")
+        add_tooltip(self.btn_process, "เริ่มประมวลผล นำข้อมูลการลาและเวลาทำงานมาบันทึกลงไฟล์ STAFF TIME ทันที")
 
         self.progress_bar = ctk.CTkProgressBar(
             action_frame,
@@ -4548,17 +4840,17 @@ class ModernCustomTkinterApp:
         self.progress_bar.grid(row=2, column=0, sticky="ew")
 
         # 6. หน้าต่างแสดงผลการทำงาน (Live Log Box - Compact)
-        card_log = ctk.CTkFrame(
+        self.card_log = ctk.CTkFrame(
             main_scroll,
             corner_radius=12,
             fg_color=self.color_card_bg,
             border_width=1.5,
             border_color=self.color_border
         )
-        card_log.grid(row=5, column=0, sticky="ew", pady=(2, 4), padx=4)
-        card_log.grid_columnconfigure(0, weight=1)
+        self.card_log.grid(row=5, column=0, sticky="ew", pady=(2, 4), padx=4)
+        self.card_log.grid_columnconfigure(0, weight=1)
 
-        log_top_frame = ctk.CTkFrame(card_log, fg_color="transparent")
+        log_top_frame = ctk.CTkFrame(self.card_log, fg_color="transparent")
         log_top_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=(8, 4))
         log_top_frame.grid_columnconfigure(0, weight=1)
 
@@ -4568,7 +4860,7 @@ class ModernCustomTkinterApp:
         badge_log = ctk.CTkLabel(
             log_h_box,
             text="ระบบตรวจสอบ",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color="#475569",
             text_color="#ffffff",
             corner_radius=6,
@@ -4580,7 +4872,7 @@ class ModernCustomTkinterApp:
         lbl_log_title = ctk.CTkLabel(
             log_h_box,
             text="บันทึกสถานะการทำงาน (System Activity Log)",
-            font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
+            font=self.font_h2,
             text_color=self.color_text_dark
         )
         lbl_log_title.pack(side="left")
@@ -4588,7 +4880,7 @@ class ModernCustomTkinterApp:
         self.btn_open_report = ctk.CTkButton(
             log_top_frame,
             text="เปิดรายงานตรวจสอบ",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
             height=30,
@@ -4601,7 +4893,7 @@ class ModernCustomTkinterApp:
         self.btn_open_folder = ctk.CTkButton(
             log_top_frame,
             text="เปิดโฟลเดอร์ผลลัพธ์",
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            font=self.font_sm,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             height=30,
@@ -4614,7 +4906,7 @@ class ModernCustomTkinterApp:
         btn_clear_log = ctk.CTkButton(
             log_top_frame,
             text="ล้างข้อความ",
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.font_sm,
             fg_color="#e2e8f0",
             hover_color="#cbd5e1",
             text_color="#334155",
@@ -4625,17 +4917,32 @@ class ModernCustomTkinterApp:
         )
         btn_clear_log.grid(row=0, column=3)
 
+        add_tooltip(self.btn_open_report, "เปิดไฟล์รายงานตรวจสอบ (Audit Report) สรุปรายการทั้งหมดที่อัปเดต")
+        add_tooltip(self.btn_open_folder, "เปิดโฟลเดอร์ที่เก็บไฟล์ผลลัพธ์ใน File Explorer")
+        add_tooltip(btn_clear_log, "ล้างข้อความประวัติในกล่องบันทึกสถานะ")
+
         self.txt_log = ctk.CTkTextbox(
-            card_log,
+            self.card_log,
             height=130,
             corner_radius=8,
-            font=ctk.CTkFont(family="Tahoma", size=13),
+            font=self.font_body,
             fg_color="#f8fafc",
             text_color="#0f172a",
             border_width=1.5,
             border_color="#cbd5e1"
         )
         self.txt_log.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 8))
+
+        # กำหนดแท็กสีข้อความสำหรับบันทึกสถานะ (Semantic Status Badges - UI/UX Pro Max)
+        try:
+            tb = self.txt_log._textbox
+            tb.tag_configure("tag_success", foreground="#16a34a", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_skip", foreground="#d97706", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_warn", foreground="#dc2626", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_info", foreground="#2563eb", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_normal", foreground="#0f172a", font=(self.font_family, 12))
+        except Exception:
+            pass
 
         # -------------------------------------------------------------
         # 3. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Footer Status & Credits)
@@ -4646,7 +4953,7 @@ class ModernCustomTkinterApp:
         lbl_footer = ctk.CTkLabel(
             footer_bar,
             text="CNT STAFF TIME AUTOMATION SUITE 2026  •  BY WERAWAT THAMRONGDULLAPARK  •  CHRISTIANI & NIELSEN (THAI) PCL.",
-            font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"),
+            font=self.font_sm,
             text_color="#94a3b8"
         )
         lbl_footer.pack(pady=5)
@@ -4690,6 +4997,13 @@ class ModernCustomTkinterApp:
         if sm in ["new_file", "overwrite"]:
             self.save_mode_var.set(sm)
 
+        # โหลดค่าสเกลตัวอักษรที่บันทึกไว้ (Senior-Friendly Scaler)
+        scale_val = settings.get("font_scale", "100%")
+        if scale_val in ["100%", "115%", "125%"]:
+            self.font_scale_var.set(scale_val)
+            mapping = {"100%": 1.0, "115%": 1.15, "125%": 1.25}
+            self._apply_font_scale(mapping.get(scale_val, 1.0))
+
         self.github_repo = settings.get("github_repo", DEFAULT_GITHUB_REPO)
         if hasattr(self, "entry_github_repo"):
             self.entry_github_repo.delete(0, 'end')
@@ -4708,7 +5022,8 @@ class ModernCustomTkinterApp:
             "att_file": self.txt_att.get().strip(),
             "save_mode": self.save_mode_var.get(),
             "github_repo": repo_val,
-            "col_config": self.get_column_config()
+            "col_config": self.get_column_config(),
+            "font_scale": self.font_scale_var.get()
         }
         save_app_settings(data)
 
@@ -4724,13 +5039,10 @@ class ModernCustomTkinterApp:
         """บันทึกการตั้งค่าตำแหน่งคอลัมน์โดยผู้ใช้กดปุ่ม"""
         self.save_current_settings()
         self.log("บันทึกการตั้งค่าตำแหน่งคอลัมน์เป้าหมายลงระบบเรียบร้อย (ระบบจดจำถาวร)")
-        messagebox.showinfo(
-            "บันทึกสำเร็จ",
-            "บันทึกตำแหน่งคอลัมน์เป้าหมายเรียบร้อยแล้ว\nระบบจะจดจำการตั้งค่านี้ไว้ทุกครั้งที่เปิดโปรแกรม"
-        )
+        self.show_toast("บันทึกตำแหน่งคอลัมน์เป้าหมายเรียบร้อย (จดจำถาวร)", "success")
 
     def on_files_dropped(self, files):
-        """จัดการเมื่อผู้ใช้ลากไฟล์มาวางบนหน้าต่างโปรแกรม (Drag & Drop)"""
+        """จัดการเมื่อผู้ใช้ลากไฟล์มาวางบนหน้าต่างโปรแกรม (Drag & Drop พร้อม Visual Feedback)"""
         if not files:
             return
 
@@ -4751,6 +5063,7 @@ class ModernCustomTkinterApp:
 
         if not valid_paths:
             self.log("ไฟล์ที่ลากมาวางไม่ใช่ไฟล์ Excel (.xlsx, .xlsm, .xls)")
+            self.show_toast("ไฟล์ที่ลากมาไม่ใช่ไฟล์ Excel", "warning")
             return
 
         if len(valid_paths) == 1:
@@ -4760,17 +5073,23 @@ class ModernCustomTkinterApp:
                 self.txt_appr.delete(0, 'end')
                 self.txt_appr.insert(0, p)
                 self.save_current_settings()
+                self._flash_card(self.card_sources)
                 self.log(f"ลากและวางไฟล์การลาที่ได้รับอนุมัติ: {os.path.basename(p)}")
+                self.show_toast(f"📥 ระบุไฟล์วันลา: {os.path.basename(p)}", "success")
             elif "ใบแจ้ง" in fn or "attendance" in fn or "ลืม" in fn:
                 self.txt_att.delete(0, 'end')
                 self.txt_att.insert(0, p)
                 self.save_current_settings()
+                self._flash_card(self.card_sources)
                 self.log(f"ลากและวางไฟล์ใบแจ้งเวลาทำงาน: {os.path.basename(p)}")
+                self.show_toast(f"📥 ระบุไฟล์ใบแจ้งเวลา: {os.path.basename(p)}", "success")
             else:
                 self.txt_main.delete(0, 'end')
                 self.txt_main.insert(0, p)
                 self.save_current_settings()
+                self._flash_card(self.card_main)
                 self.log(f"ลากและวางไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
+                self.show_toast(f"📥 ระบุไฟล์ STAFF TIME: {os.path.basename(p)}", "success")
         else:
             # ลากหลายไฟล์มาพร้อมกัน จัดเข้าแต่ละช่องให้อัตโนมัติ
             assigned_main = False
@@ -4790,7 +5109,10 @@ class ModernCustomTkinterApp:
                     assigned_main = True
                     self.log(f"ระบุไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
             self.save_current_settings()
+            self._flash_card(self.card_main)
+            self._flash_card(self.card_sources)
             self.log("จัดไฟล์นำเข้าลงช่องทั้งหมดเรียบร้อยแล้ว")
+            self.show_toast(f"📥 จัดระเบียบ {len(valid_paths)} ไฟล์ลงช่องสำเร็จ", "success")
 
     # -------------------------------------------------------------
     # UI Actions & Modal Openers
@@ -4812,6 +5134,7 @@ class ModernCustomTkinterApp:
             self.entry_github_repo.insert(0, new_repo)
         self.save_current_settings()
         self.log(f"บันทึก GitHub Repository: {new_repo}")
+        self.show_toast(f"บันทึก GitHub Repo: {new_repo}", "success")
         self.start_silent_update_check()
 
     def save_github_repo_from_entry(self):
@@ -4823,7 +5146,7 @@ class ModernCustomTkinterApp:
         self.github_repo = new_repo
         self.save_current_settings()
         self.log(f"บันทึก GitHub Repository เรียบร้อย: {new_repo}")
-        messagebox.showinfo("บันทึกสำเร็จ", f"บันทึก GitHub Repository เรียบร้อย:\n{new_repo}")
+        self.show_toast(f"บันทึก GitHub Repo เรียบร้อย: {new_repo}", "success")
         self.start_silent_update_check()
 
     def start_silent_update_check(self):
@@ -4958,6 +5281,7 @@ class ModernCustomTkinterApp:
         self.entry_start_row.delete(0, 'end'); self.entry_start_row.insert(0, str(defaults['start_row']))
         self.save_current_settings()
         self.log("คืนค่าตำแหน่งคอลัมน์เป็นค่ามาตรฐานเรียบร้อย: A, B, E, G, L, M, Q, แถวที่ 2")
+        self.show_toast("คืนค่าตำแหน่งคอลัมน์เป็นค่ามาตรฐานเรียบร้อย", "info")
 
     def get_column_config(self):
         return {
@@ -4972,8 +5296,24 @@ class ModernCustomTkinterApp:
         }
 
     def log(self, message):
-        self.txt_log.insert("end", message + "\n")
-        self.txt_log.see("end")
+        msg_str = str(message)
+        tag = "tag_normal"
+        if any(w in msg_str for w in ["สำเร็จ", "อัปเดต", "พร้อมทำงาน", "สมบูรณ์"]):
+            tag = "tag_success"
+        elif any(w in msg_str for w in ["ข้าม", "ละเว้น"]):
+            tag = "tag_skip"
+        elif any(w in msg_str for w in ["ผิดพลาด", "เตือน", "ไม่พบ", "❌"]):
+            tag = "tag_warn"
+        elif any(w in msg_str for w in ["โหลด", "เลือกไฟล์", "บันทึก", "คำแนะนำ", "ลากและวาง", "ระบุไฟล์"]):
+            tag = "tag_info"
+
+        try:
+            tb = self.txt_log._textbox
+            tb.insert("end", msg_str + "\n", tag)
+            tb.see("end")
+        except Exception:
+            self.txt_log.insert("end", msg_str + "\n")
+            self.txt_log.see("end")
 
     def clear_log(self):
         self.txt_log.delete("1.0", "end")

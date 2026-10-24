@@ -13,5 +13,6 @@
     "checkout_col": "M",
     "leave_code_col": "Q",
     "start_row": "2"
-  }
+  },
+  "font_scale": "100%"
 }
