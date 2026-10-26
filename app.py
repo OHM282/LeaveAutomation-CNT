@@ -4111,6 +4111,9 @@ class UpdateDialog(ctk.CTkToplevel):
 chcp 65001 >nul
 set _MEIPASS2=
 set _MEIPASS=
+set PYI_PARENT_PID=
+set PYTHONPATH=
+set PYTHONHOME=
 title อัปเดตโปรแกรม LeaveAutomation_1856
 echo ========================================================
 echo    กำลังดำเนินการอัปเดต LeaveAutomation_1856 เป็นเวอร์ชันใหม่...
@@ -4132,6 +4135,10 @@ if not exist "{current_exe}" (
 echo ติดตั้งเสร็จสิ้น กำลังเปิดโปรแกรม...
 set _MEIPASS2=
 set _MEIPASS=
+set PYI_PARENT_PID=
+set PYTHONPATH=
+set PYTHONHOME=
+timeout /t 1 /nobreak >nul
 start "" "{current_exe}"
 del "%~f0"
 """
@@ -4139,8 +4146,8 @@ del "%~f0"
                     f.write(bat_content)
 
                 clean_env = os.environ.copy()
-                clean_env.pop('_MEIPASS2', None)
-                clean_env.pop('_MEIPASS', None)
+                for pyi_var in ['_MEIPASS2', '_MEIPASS', 'PYI_PARENT_PID', 'PYTHONPATH', 'PYTHONHOME']:
+                    clean_env.pop(pyi_var, None)
 
                 subprocess.Popen(
                     ["cmd.exe", "/c", bat_path],
