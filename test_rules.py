@@ -14,7 +14,9 @@ from app import (
     get_leave_code,
     parse_leave_duration,
     is_company_holiday,
-    COMPANY_HOLIDAYS_2026
+    COMPANY_HOLIDAYS_2026,
+    populate_unrecorded_sheet_in_workbook,
+    analyze_attendance_anomalies
 )
 
 
@@ -185,6 +187,40 @@ def test_company_holidays():
     assert is_h is False and name is None
 
 
+def test_unrecorded_sheet_grouping():
+    """ทดสอบการจัดกลุ่มพนักงานที่ไม่มีการแจ้งออนไลน์: หาก 1 คนมีหลายวัน ต้องเรียงติดกันตามลำดับวันที่"""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    # Mock data
+    mock_anomalies = [
+        {'emp_id': '5732', 'emp_name': 'กัลยกร  นิยมเดชา', 'date': '19/10/2026', 'date_obj': date(2026, 10, 19), 'category': 'missing_punch', 'detail': 'ลืมสแกนออก', 'scans_str': '07:10'},
+        {'emp_id': '5688', 'emp_name': 'กัณมน กิบุญมา', 'date': '19/10/2026', 'date_obj': date(2026, 10, 19), 'category': 'missing_punch', 'detail': 'ลืมสแกนออก', 'scans_str': '07:15'},
+        {'emp_id': '5732', 'emp_name': 'กัลยกร  นิยมเดชา', 'date': '11/10/2026', 'date_obj': date(2026, 10, 11), 'category': 'missing_punch', 'detail': 'ลืมสแกนออก', 'scans_str': '07:22'},
+        {'emp_id': '5688', 'emp_name': 'กัณมน กิบุญมา', 'date': '12/10/2026', 'date_obj': date(2026, 10, 12), 'category': 'missing_punch', 'detail': 'ลืมสแกนออก', 'scans_str': '07:18'},
+    ]
+    # Sort with anomaly_sort_key
+    def anomaly_sort_key(a):
+        dt_o = a.get('date_obj')
+        d_tup = (dt_o.year, dt_o.month, dt_o.day) if dt_o else (9999, 12, 31)
+        return (clean_thai_name(a.get('emp_name', '')), str(a.get('emp_id', '')), d_tup)
+    mock_anomalies.sort(key=anomaly_sort_key)
+
+    populate_unrecorded_sheet_in_workbook(wb, anomalies=mock_anomalies, filename="CN.11856", create_sheet=True)
+    ws = wb['ไม่มีแจ้งในระบบ']
+    assert ws['A1'].value == "รายชื่อที่ไม่มีการแจ้งออนไลน์ CN.11856"
+    assert ws['A2'].value == "รหัส"
+    assert ws['B2'].value == "ชื่อ-สกุล"
+    assert ws['D2'].value == "วันที่"
+    assert ws.column_dimensions['C'].hidden is True
+
+    # Row 3 & 4 should be กัณมน (12/10, then 19/10)
+    assert ws.cell(3, 2).value == 'กัณมน กิบุญมา' and ws.cell(3, 4).value == '12/10/2026'
+    assert ws.cell(4, 2).value == 'กัณมน กิบุญมา' and ws.cell(4, 4).value == '19/10/2026'
+    # Row 5 & 6 should be กัลยกร (11/10, then 19/10)
+    assert ws.cell(5, 2).value == 'กัลยกร  นิยมเดชา' and ws.cell(5, 4).value == '11/10/2026'
+    assert ws.cell(6, 2).value == 'กัลยกร  นิยมเดชา' and ws.cell(6, 4).value == '19/10/2026'
+
+
 if __name__ == "__main__":
     test_checkout_time_rounding()
     test_fingerprint_scans()
@@ -194,4 +230,5 @@ if __name__ == "__main__":
     test_leave_rules_and_abbreviations()
     test_parse_leave_duration()
     test_company_holidays()
+    test_unrecorded_sheet_grouping()
     print("ALL TESTS PASSED SUCCESSFULLY! (100% OK)")

@@ -1776,6 +1776,14 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
                     if g_val and g_val != 'None':
                         g_cell.value = None
 
+    # อัปเดตข้อมูลพนักงานที่ไม่มีการแจ้งออนไลน์ลงในชีท 'ไม่มีแจ้งในระบบ' อัตโนมัติ (หากมีชีทนี้อยู่ในไฟล์)
+    if 'ไม่มีแจ้งในระบบ' in wb.sheetnames:
+        try:
+            populate_unrecorded_sheet_in_workbook(wb, filename=os.path.basename(main_filepath), col_config=cfg, create_sheet=False)
+            log_callback("📝 อัปเดตข้อมูลชีท 'ไม่มีแจ้งในระบบ' (จัดกลุ่มตามชื่อพนักงาน) เรียบร้อย")
+        except Exception as e:
+            log_callback(f"⚠️ ไม่สามารถอัปเดตชีท 'ไม่มีแจ้งในระบบ' ได้: {e}")
+
     # บันทึกไฟล์ผลลัพธ์
     dir_name = os.path.dirname(main_filepath)
     base_name = os.path.basename(main_filepath)
@@ -2845,20 +2853,27 @@ class AnalyticsDialog(ctk.CTkToplevel):
 # ระบบวิเคราะห์เวลาทำงานและสแกนผิดปกติอัจฉริยะ (Smart Anomaly Analyzer)
 # -------------------------------------------------------------
 
-def analyze_attendance_anomalies(main_filepath, col_config=None):
+def analyze_attendance_anomalies(main_source, col_config=None):
     """
     วิเคราะห์ข้อมูลสแกนดิบและเวลาทำงานในทุกชีท เพื่อหาความผิดปกติ:
     1. missing_punch: สแกนขาเดียว (มีเฉพาะเข้า หรือมีเฉพาะออก)
     2. unrecorded_absence: ขาดงานโดยไม่แจ้ง (วันทำงานปกติ ไม่มีสแกน และไม่มีข้อมูลการลา)
-    """
-    if not main_filepath or not os.path.exists(main_filepath):
-        return {'success': False, 'error': 'ไม่พบไฟล์รายงาน STAFF TIME'}
 
+    รองรับทั้ง main_source เป็น filepath (str) หรือ openpyxl.Workbook
+    จัดกลุ่มตามชื่อพนักงาน และเรียงตามลำดับวันที่โดยอัตโนมัติ (หาก 1 คนมีหลายวัน จะเรียงติดกัน)
+    """
     cfg = col_config or get_default_column_config()
-    try:
-        wb = openpyxl.load_workbook(main_filepath, data_only=True)
-    except Exception as e:
-        return {'success': False, 'error': f'ไม่สามารถเปิดไฟล์ Excel ได้: {str(e)}'}
+    if isinstance(main_source, str):
+        if not main_source or not os.path.exists(main_source):
+            return {'success': False, 'error': 'ไม่พบไฟล์รายงาน STAFF TIME'}
+        try:
+            wb = openpyxl.load_workbook(main_source, data_only=True)
+        except Exception as e:
+            return {'success': False, 'error': f'ไม่สามารถเปิดไฟล์ Excel ได้: {str(e)}'}
+    elif isinstance(main_source, openpyxl.Workbook):
+        wb = main_source
+    else:
+        return {'success': False, 'error': 'ข้อมูลไฟล์ไม่ถูกต้อง'}
 
     sheets = map_workbook_sheets(wb)
     if not sheets:
@@ -2891,22 +2906,26 @@ def analyze_attendance_anomalies(main_filepath, col_config=None):
                 continue
 
             scan_val = ws[f"{scan_col}{r}"].value
-            h_in, h_out, f_in, f_out, raw_val = check_fingerprint_scans(scan_val)
+            has_in, has_out, scans_list, earliest_dec, latest_dec = check_fingerprint_scans(scan_val)
             leave_val = str(ws[f"{leave_type_col}{r}"].value or '').strip()
             code_val = str(ws[f"{leave_code_col}{r}"].value or '').strip()
 
             # 1. สแกนขาเดียว (Missing Punch)
-            if (h_in and not h_out) or (not h_in and h_out):
-                missing_side = 'ลืมสแกนออก (มีเฉพาะเวลาเข้า)' if h_in else 'ลืมสแกนเข้า (มีเฉพาะเวลาออก)'
-                action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาออก' if h_in else 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาเข้า'
+            if (has_in and not has_out) or (not has_in and has_out):
+                scans_str = ", ".join(scans_list) if scans_list else str(scan_val or '')
+                missing_side = f"ลืมสแกนออก (มีเฉพาะเวลาเข้า {scans_str})" if has_in else f"ลืมสแกนเข้า (มีเฉพาะเวลาออก {scans_str})"
+                action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาออก' if has_in else 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาเข้า'
                 anomalies.append({
                     'category': 'missing_punch',
                     'category_desc': 'ลืมสแกน (ขาเดียว)',
                     'sheet': sheet_name,
                     'date': dt.strftime('%d/%m/%Y'),
+                    'date_obj': dt,
                     'emp_id': emp_id,
                     'emp_name': emp_name,
-                    'scan_raw': str(raw_val or '-'),
+                    'scan_raw': str(scan_val or '-'),
+                    'scans_list': scans_list,
+                    'scans_str': scans_str,
                     'detail': missing_side,
                     'action_needed': action
                 })
@@ -2914,26 +2933,204 @@ def analyze_attendance_anomalies(main_filepath, col_config=None):
                 counts['total'] += 1
 
             # 2. ไม่พบสแกนและไม่ลา (Unrecorded Absence)
-            elif not h_in and not h_out and not leave_val and not code_val and not is_holiday and not is_sunday:
+            elif not has_in and not has_out and not leave_val and not code_val and not is_holiday and not is_sunday:
                 anomalies.append({
                     'category': 'unrecorded_absence',
                     'category_desc': 'ไม่พบสแกนและไม่ลา',
                     'sheet': sheet_name,
                     'date': dt.strftime('%d/%m/%Y'),
+                    'date_obj': dt,
                     'emp_id': emp_id,
                     'emp_name': emp_name,
                     'scan_raw': '-',
+                    'scans_list': [],
+                    'scans_str': '-',
                     'detail': 'ไม่พบสแกนนิ้วในระบบ และไม่มีบันทึกข้อมูลการลาในตาราง',
                     'action_needed': 'ตรวจสอบว่าพนักงานขาดงาน หรือยังไม่ได้บันทึกใบลาที่ได้รับอนุมัติ'
                 })
                 counts['unrecorded_absence'] += 1
                 counts['total'] += 1
 
+    # จัดกลุ่มตามชื่อพนักงาน และเรียงตามลำดับวันที่โดยอัตโนมัติ
+    def anomaly_sort_key(a):
+        dt_o = a.get('date_obj')
+        d_tup = (dt_o.year, dt_o.month, dt_o.day) if dt_o else (9999, 12, 31)
+        return (clean_thai_name(a.get('emp_name', '')), str(a.get('emp_id', '')), d_tup)
+
+    anomalies.sort(key=anomaly_sort_key)
+
     return {
         'success': True,
         'counts': counts,
         'anomalies': anomalies
     }
+
+
+def populate_unrecorded_sheet_in_workbook(wb, anomalies=None, filename="", col_config=None, create_sheet=True):
+    """
+    กรอกข้อมูลพนักงานที่ไม่มีการแจ้งออนไลน์ลงในชีท 'ไม่มีแจ้งในระบบ' ของ openpyxl.Workbook
+    จัดกลุ่มตามชื่อพนักงาน (หาก 1 คนมีหลายวัน จะเรียงติดกันตามลำดับวันที่)
+    พร้อมฟอร์แมตตามแบบฟอร์มมาตรฐานของบริษัท (Yellow Banner A1, Blue Header A2:G2, Hidden Col C)
+    """
+    sheet_name = 'ไม่มีแจ้งในระบบ'
+    if sheet_name not in wb.sheetnames:
+        if not create_sheet:
+            return False
+        ws = wb.create_sheet(title=sheet_name)
+    else:
+        ws = wb[sheet_name]
+
+    if anomalies is None:
+        res = analyze_attendance_anomalies(wb, col_config=col_config)
+        anomalies = res.get('anomalies', [])
+
+    # 1. ปลดการ merge เซลล์เก่าในแถว 3 ขึ้นไป คอลัมน์ 1-7 เพื่อไม่ให้ติด MergedCell read-only
+    ranges_to_unmerge = []
+    for mrange in list(ws.merged_cells.ranges):
+        if mrange.min_row >= 3 and mrange.min_col <= 7:
+            ranges_to_unmerge.append(mrange)
+    for r in ranges_to_unmerge:
+        ws.unmerge_cells(str(r))
+
+    # 2. หัวตารางแถว 1 (Yellow Banner)
+    yellow_fill = PatternFill(start_color="FFFFFF00", end_color="FFFFFF00", fill_type="solid")
+    if not ws['A1'].value:
+        m_proj = re.search(r'(?:CN\.?|cn\.?)?(\d{4,5})', str(filename))
+        proj_code = f"CN.{m_proj.group(1)}" if m_proj else ""
+        ws['A1'].value = f"รายชื่อที่ไม่มีการแจ้งออนไลน์ {proj_code}".strip()
+    ws['A1'].font = Font(name="Arial", size=12, bold=True)
+
+    for c_idx in range(1, 8):
+        ws.cell(1, c_idx).fill = yellow_fill
+
+    # F1:G1 merge & formula NOW()
+    ws.cell(1, 6).value = "=NOW()"
+    ws.cell(1, 6).font = Font(name="Arial", size=10, bold=False)
+    ws.cell(1, 6).alignment = Alignment(horizontal="right", vertical="center")
+    ws.cell(1, 6).number_format = 'm/d/yy h:mm'
+    if 'F1:G1' not in [str(m) for m in ws.merged_cells.ranges]:
+        ws.merge_cells('F1:G1')
+
+    # 3. หัวตารางแถว 2 (Blue Header)
+    blue_fill = PatternFill(start_color="FF0070C0", end_color="FF0070C0", fill_type="solid")
+    header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    headers = {
+        1: ("รหัส", "center"),
+        2: ("ชื่อ-สกุล", "left"),
+        4: ("วันที่", "center"),
+        5: ("รายการ", "center"),
+        6: ("หมายเหตุ", "left"),
+        7: ("ติดตามครั้งที่", "center")
+    }
+    for c_idx, (h_text, h_align) in headers.items():
+        cell = ws.cell(2, c_idx)
+        cell.value = h_text
+        cell.fill = blue_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal=h_align, vertical="center")
+
+    # ขนาดคอลัมน์
+    ws.column_dimensions['A'].width = 8.5
+    ws.column_dimensions['B'].width = 24.0
+    ws.column_dimensions['C'].hidden = True
+    ws.column_dimensions['C'].width = 0
+    ws.column_dimensions['D'].width = 13.0
+    ws.column_dimensions['E'].width = 22.0
+    ws.column_dimensions['F'].width = 32.0
+    ws.column_dimensions['G'].width = 15.0
+
+    # 4. ล้างข้อมูลเก่าแถว 3 ขึ้นไป เฉพาะคอลัมน์ A ถึง G (ไม่แตะคอลัมน์โน้ต I เป็นต้นไป)
+    max_clear = max(ws.max_row, len(anomalies) + 5)
+    empty_border = Border()
+    empty_fill = PatternFill(fill_type=None)
+    for r in range(3, max_clear + 1):
+        for c in range(1, 8):
+            cell = ws.cell(r, c)
+            cell.value = None
+            cell.border = empty_border
+            cell.fill = empty_fill
+
+    # 5. เขียนรายการความผิดปกติ
+    data_font = Font(name="Arial", size=10)
+    data_border = Border(
+        left=Side(style='thin', color='A6A6A6'),
+        right=Side(style='thin', color='A6A6A6'),
+        top=Side(style='hair', color='D9D9D9'),
+        bottom=Side(style='hair', color='D9D9D9')
+    )
+
+    for idx, a in enumerate(anomalies, start=3):
+        cat = a.get('category', '')
+        detail = a.get('detail', '')
+        scans_str = a.get('scans_str', '')
+
+        if cat == 'missing_punch':
+            if 'ลืมสแกนเข้า' in detail:
+                item_name = 'ลืมสแกนเข้า'
+                note = f"มีเวลาออก ({scans_str})" if scans_str and scans_str != '-' else "มีเวลาออก"
+            else:
+                item_name = 'ลืมสแกนออก'
+                note = f"มีเวลาเข้า ({scans_str})" if scans_str and scans_str != '-' else "มีเวลาเข้า"
+        else:
+            item_name = 'ไม่พบสแกนและไม่ลา'
+            note = 'ไม่พบสแกนนิ้วและไม่มีบันทึกการลา'
+
+        emp_id_val = a.get('emp_id', '')
+        val_id = int(emp_id_val) if str(emp_id_val).isdigit() else str(emp_id_val)
+
+        row_vals = {
+            1: (val_id, "center"),
+            2: (str(a.get('emp_name', '')), "left"),
+            3: ("", "center"),
+            4: (str(a.get('date', '')), "center"),
+            5: (item_name, "center"),
+            6: (note, "left"),
+            7: ("", "center")
+        }
+
+        for c_idx, (val, align) in row_vals.items():
+            cell = ws.cell(idx, c_idx)
+            cell.value = val
+            cell.font = data_font
+            cell.alignment = Alignment(horizontal=align, vertical="center")
+            cell.border = data_border
+
+    # Auto Filter
+    if anomalies:
+        ws.auto_filter.ref = f"A2:G{2 + len(anomalies)}"
+
+    return True
+
+
+def fill_unrecorded_sheet(target, anomalies=None, col_config=None, save_path=None, create_sheet=True):
+    """
+    กรอกข้อมูลพนักงานที่ไม่มีการแจ้งออนไลน์ลงในชีท 'ไม่มีแจ้งในระบบ'
+    target: สามารถเป็น filepath (str) หรือ openpyxl.Workbook
+    """
+    if isinstance(target, str):
+        if not os.path.exists(target):
+            return {'success': False, 'error': 'ไม่พบไฟล์รายงาน STAFF TIME'}
+        wb = openpyxl.load_workbook(target)
+        populate_unrecorded_sheet_in_workbook(
+            wb,
+            anomalies=anomalies,
+            filename=os.path.basename(target),
+            col_config=col_config,
+            create_sheet=create_sheet
+        )
+        out_file = save_path or target
+        wb.save(out_file)
+        wb.close()
+        return {'success': True, 'path': out_file, 'count': len(anomalies) if anomalies is not None else 0}
+    elif isinstance(target, openpyxl.Workbook):
+        populate_unrecorded_sheet_in_workbook(
+            target,
+            anomalies=anomalies,
+            col_config=col_config,
+            create_sheet=create_sheet
+        )
+        return {'success': True, 'workbook': target, 'count': len(anomalies) if anomalies is not None else 0}
+    return {'success': False, 'error': 'target ไม่ถูกต้อง'}
 
 
 class AnomalyDialog(ctk.CTkToplevel):
@@ -3056,10 +3253,25 @@ class AnomalyDialog(ctk.CTkToplevel):
         self.txt_search.grid(row=0, column=0, sticky="ew")
         self.txt_search.bind("<KeyRelease>", lambda e: self.on_search_changed())
 
-        # Action Button: Export to Excel
-        btn_export = ctk.CTkButton(
-            ctrl_frame,
-            text="ส่งออกรายงาน Excel (.xlsx)",
+        # Action Buttons Container (Right side)
+        action_box = ctk.CTkFrame(ctrl_frame, fg_color="transparent")
+        action_box.grid(row=0, column=2, sticky="e")
+
+        self.btn_fill_sheet = ctk.CTkButton(
+            action_box,
+            text="📝 กรอกลงชีท \"ไม่มีแจ้งในระบบ\"",
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
+            fg_color="#1d4ed8",
+            hover_color="#1e40af",
+            height=36,
+            corner_radius=8,
+            command=self.fill_unrecorded_direct
+        )
+        self.btn_fill_sheet.pack(side="left", padx=(0, 6))
+
+        self.btn_export = ctk.CTkButton(
+            action_box,
+            text="📥 ส่งออก Excel ฟอร์มบริษัท",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
             fg_color="#059669",
             hover_color="#047857",
@@ -3067,7 +3279,7 @@ class AnomalyDialog(ctk.CTkToplevel):
             corner_radius=8,
             command=self.export_to_excel
         )
-        btn_export.grid(row=0, column=2, sticky="e")
+        self.btn_export.pack(side="left")
 
         # 4. Results List Container
         self.list_scroll = ctk.CTkScrollableFrame(self, fg_color="#f1f5f9", corner_radius=10)
@@ -3103,7 +3315,8 @@ class AnomalyDialog(ctk.CTkToplevel):
         add_tooltip(self.btn_f_all, "แสดงรายการความผิดปกติทั้งหมดที่ตรวจพบ")
         add_tooltip(self.btn_f_punch, "กรองเฉพาะพนักงานที่มีสแกนนิ้วเพียงขาเดียว (ขาดเช้าหรือขาดเย็น)")
         add_tooltip(self.btn_f_absent, "กรองเฉพาะพนักงานที่ไม่มีสแกนนิ้วเลย และไม่ได้ลงวันลา")
-        add_tooltip(btn_export, "ส่งออกรายงานสรุปความผิดปกติเป็นไฟล์ Excel พร้อมคำแนะนำการแก้ไข")
+        add_tooltip(self.btn_fill_sheet, "กรอกรายชื่อผู้ไม่มีการแจ้งออนไลน์ลงในชีท 'ไม่มีแจ้งในระบบ' ของไฟล์ STAFF TIME ทันที")
+        add_tooltip(self.btn_export, "ส่งออกรายงานเป็นไฟล์ Excel ใหม่ตามแบบฟอร์มมาตรฐานของบริษัท")
         add_tooltip(btn_close, "ปิดหน้าต่างวิเคราะห์เวลาผิดปกติ")
 
     def _create_kpi_card(self, parent, col, title, initial_val, text_col, bg_col):
@@ -3257,15 +3470,52 @@ class AnomalyDialog(ctk.CTkToplevel):
             )
             lbl_act.pack(anchor="w")
 
-    def export_to_excel(self):
-        if not self.anomalies_data:
-            messagebox.showinfo("ไม่มีข้อมูล", "ไม่พบข้อมูลความผิดปกติที่จะส่งออก")
+    def fill_unrecorded_direct(self):
+        """กรอกข้อมูลลงในชีท 'ไม่มีแจ้งในระบบ' ของไฟล์ STAFF TIME ทันที"""
+        if not self.main_file or not os.path.exists(self.main_file):
+            messagebox.showerror("ข้อผิดพลาด", "ไม่พบไฟล์รายงาน STAFF TIME สำหรับดำเนินการ", parent=self)
             return
 
-        default_name = f"รายงานเวลาทำงานและสแกนผิดปกติ_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        if not self.anomalies_data:
+            messagebox.showinfo("ไม่มีข้อมูล", "ไม่พบข้อมูลความผิดปกติ หรือข้อมูลการลงเวลาถูกต้องครบถ้วนสมบูรณ์ 100%", parent=self)
+            return
+
+        confirm = messagebox.askyesno(
+            "ยืนยันการกรอกข้อมูล",
+            f"ระบบจะกรอกรายชื่อผู้ไม่มีการแจ้งออนไลน์ ({len(self.anomalies_data):,} รายการ) ลงในชีท 'ไม่มีแจ้งในระบบ' ของไฟล์:\n{os.path.basename(self.main_file)}\n\n(หาก 1 คนมีหลายวัน ระบบจัดเรียงชื่อให้อยู่ติดกันตามลำดับวันที่อัตโนมัติ)\n\nต้องการดำเนินการต่อหรือไม่?",
+            parent=self
+        )
+        if not confirm:
+            return
+
+        try:
+            res = fill_unrecorded_sheet(self.main_file, anomalies=self.anomalies_data, col_config=self.col_config)
+            if res.get('success'):
+                messagebox.showinfo(
+                    "ดำเนินการสำเร็จ",
+                    f"กรอกข้อมูลลงชีท 'ไม่มีแจ้งในระบบ' เรียบร้อยแล้ว!\n\n• จำนวนที่บันทึก: {len(self.anomalies_data):,} รายการ\n• บันทึกลงไฟล์: {os.path.basename(self.main_file)}\n• พร้อมให้ฝ่ายบุคคล/ผู้เกี่ยวข้องติดตามผลได้ทันที",
+                    parent=self
+                )
+            else:
+                messagebox.showerror("เกิดข้อผิดพลาด", res.get('error', 'ไม่สามารถกรอกข้อมูลได้'), parent=self)
+        except PermissionError:
+            messagebox.showerror(
+                "ไฟล์กำลังถูกเปิดใช้งาน (Permission Denied)",
+                f"ไฟล์ {os.path.basename(self.main_file)} กำลังถูกเปิดอยู่ในโปรแกรม Excel\n\nกรุณาปิดโปรแกรม Excel ก่อน แล้วลองกดปุ่มนี้ใหม่อีกครั้ง",
+                parent=self
+            )
+        except Exception as e:
+            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถบันทึกข้อมูลลงไฟล์ได้: {str(e)}", parent=self)
+
+    def export_to_excel(self):
+        if not self.anomalies_data:
+            messagebox.showinfo("ไม่มีข้อมูล", "ไม่พบข้อมูลความผิดปกติที่จะส่งออก", parent=self)
+            return
+
+        default_name = f"รายชื่อที่ไม่มีการแจ้งออนไลน์_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
         save_path = filedialog.asksaveasfilename(
             parent=self,
-            title="บันทึกรายงานความผิดปกติเป็นไฟล์ Excel",
+            title="บันทึกรายงานความผิดปกติเป็นไฟล์ Excel (ฟอร์มบริษัท)",
             defaultextension=".xlsx",
             initialfile=default_name,
             filetypes=[("Excel Files", "*.xlsx")]
@@ -3275,65 +3525,25 @@ class AnomalyDialog(ctk.CTkToplevel):
 
         try:
             wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "รายงานเวลาผิดปกติ"
-
-            headers = [
-                "ลำดับ", "วันที่", "ชีทประจำวัน", "รหัสพนักงาน", "ชื่อพนักงาน",
-                "ประเภทความผิดปกติ", "สแกนดิบในชีท", "รายละเอียด", "ข้อเสนอแนะในการดำเนินการ"
-            ]
-            ws.append(headers)
-
-            # Header Styling: CNT Corporate Blue
-            header_fill = openpyxl.styles.PatternFill(start_color="1D4ED8", end_color="1D4ED8", fill_type="solid")
-            header_font = openpyxl.styles.Font(name="Tahoma", size=11, bold=True, color="FFFFFF")
-            thin_border = openpyxl.styles.Border(
-                left=openpyxl.styles.Side(style='thin', color='CBD5E1'),
-                right=openpyxl.styles.Side(style='thin', color='CBD5E1'),
-                top=openpyxl.styles.Side(style='thin', color='CBD5E1'),
-                bottom=openpyxl.styles.Side(style='thin', color='CBD5E1')
+            populate_unrecorded_sheet_in_workbook(
+                wb,
+                anomalies=self.anomalies_data,
+                filename=os.path.basename(self.main_file or ''),
+                create_sheet=True
             )
-
-            for col_num in range(1, len(headers) + 1):
-                cell = ws.cell(row=1, column=col_num)
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
-
-            for idx, a in enumerate(self.anomalies_data, 1):
-                row_data = [
-                    idx,
-                    a['date'],
-                    a['sheet'],
-                    a['emp_id'],
-                    a['emp_name'],
-                    a['category_desc'],
-                    a['scan_raw'],
-                    a['detail'],
-                    a['action_needed']
-                ]
-                ws.append(row_data)
-                curr_row = idx + 1
-                for c_idx in range(1, len(row_data) + 1):
-                    c_cell = ws.cell(row=curr_row, column=c_idx)
-                    c_cell.font = openpyxl.styles.Font(name="Tahoma", size=10)
-                    c_cell.border = thin_border
-                    if c_idx in [1, 2, 3, 4, 6, 7]:
-                        c_cell.alignment = openpyxl.styles.Alignment(horizontal="center")
-
-            # Auto fit width
-            for col in ws.columns:
-                max_len = max(len(str(cell.value or '')) for cell in col)
-                col_letter = openpyxl.utils.get_column_letter(col[0].column)
-                ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+            # ลบ Sheet เริ่มต้นหากมี sheet 'ไม่มีแจ้งในระบบ' อยู่
+            if 'Sheet' in wb.sheetnames and len(wb.sheetnames) > 1 and 'ไม่มีแจ้งในระบบ' in wb.sheetnames:
+                del wb['Sheet']
 
             wb.save(save_path)
+            wb.close()
             messagebox.showinfo(
                 "ส่งออกสำเร็จ",
-                f"สร้างไฟล์รายงานความผิดปกติเรียบร้อยแล้ว:\n{save_path}"
+                f"สร้างไฟล์รายงานความผิดปกติตามแบบฟอร์มบริษัทเรียบร้อยแล้ว:\n{save_path}\n\n• จัดกลุ่มพนักงานที่มีหลายวันเรียงต่อกันตามลำดับวันที่",
+                parent=self
             )
         except Exception as e:
-            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ Excel ได้: {str(e)}")
+            messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถบันทึกไฟล์ Excel ได้: {str(e)}", parent=self)
 
 # -------------------------------------------------------------
 # ระบบอัปเดตโปรแกรมอัตโนมัติผ่าน GitHub Releases (Auto-Updater)
