@@ -293,6 +293,8 @@ def get_default_column_config():
         'emp_name_col': 'B',
         'scan_col': 'E',
         'leave_type_col': 'G',
+        'time_in_col': 'J',
+        'time_out_col': 'K',
         'checkin_col': 'L',
         'checkout_col': 'M',
         'leave_code_col': 'Q',
@@ -439,6 +441,38 @@ def check_fingerprint_scans(val):
         has_out = True
 
     return has_in, has_out, scans_list, earliest_dec, latest_dec
+
+
+def is_valid_time(val):
+    """
+    ตรวจสอบว่าเป็นเวลาที่ถูกต้อง (ไม่ใช่ None, ไม่ใช่ 'ไม่ได้แสกน'/'ไม่ได้สแกน', และไม่ใช่ 0:00)
+    รองรับทั้ง time, datetime, float/int (decimal fraction ของวันใน Excel), และ string
+    """
+    if val is None:
+        return False
+    if isinstance(val, (time, datetime)):
+        return not (val.hour == 0 and val.minute == 0)
+    if isinstance(val, (int, float)):
+        return val > 0.001
+    s = str(val).strip()
+    if not s or s in ['None', 'ไม่ได้แสกน', 'ไม่ได้สแกน', '0:00', '00:00', '0:00:00', '0', '#VALUE!', '-']:
+        return False
+    m = re.match(r'^(\d{1,2}):(\d{2})', s)
+    if m:
+        h, mi = int(m.group(1)), int(m.group(2))
+        return not (h == 0 and mi == 0)
+    return False
+
+
+def format_time_val(val):
+    """จัดรูปแบบค่าเวลาให้เป็น HH:MM สำหรับแสดงผลและใส่ในหมายเหตุ"""
+    if isinstance(val, (time, datetime)):
+        return f"{val.hour:02d}:{val.minute:02d}"
+    s = str(val).strip()
+    m = re.match(r'^(\d{1,2}):(\d{2})', s)
+    if m:
+        return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}"
+    return s
 
 
 def clean_thai_name(name):
@@ -2898,6 +2932,10 @@ def analyze_attendance_anomalies(main_source, col_config=None):
     emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
     scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
     leave_type_col = cfg.get('leave_type_col', 'G').upper().strip() or 'G'
+    time_in_col = cfg.get('time_in_col', 'J').upper().strip() or 'J'
+    time_out_col = cfg.get('time_out_col', 'K').upper().strip() or 'K'
+    checkin_col = cfg.get('checkin_col', 'L').upper().strip() or 'L'
+    checkout_col = cfg.get('checkout_col', 'M').upper().strip() or 'M'
     leave_code_col = cfg.get('leave_code_col', 'Q').upper().strip() or 'Q'
 
     for dt, sheet_name in sheets.items():
@@ -2911,23 +2949,65 @@ def analyze_attendance_anomalies(main_source, col_config=None):
             if not emp_id or not emp_name:
                 continue
 
-            scan_val = ws[f"{scan_col}{r}"].value
-            has_in, has_out, scans_list, earliest_dec, latest_dec = check_fingerprint_scans(scan_val)
+            # 1. ตรวจสอบข้อมูลการลาและรหัสวันลา (Col G และ Col Q)
             leave_val = str(ws[f"{leave_type_col}{r}"].value or '').strip()
-            if leave_val.lower() == 'none':
-                leave_val = ''
-            code_val = str(ws[f"{leave_code_col}{r}"].value or '').strip()
-            has_q_code = any(c in code_val for c in ['พ', 'ลป', 'ลก', 'น', 'บ', 'ค', 'ส', 'อ']) and not code_val.startswith('=')
+            has_leave = bool(leave_val and leave_val.lower() != 'none')
             
-            # หากมีรายการแจ้งในระบบแล้ว (มีใบแจ้งฯ หรือมีบันทึกการลาในช่อง G หรือรหัสวันลาในช่อง Q)
-            # จะไม่ถือว่าเป็น "ผู้ที่ไม่มีการแจ้งออนไลน์"
-            has_system_notification = bool(leave_val or has_q_code)
+            code_val = str(ws[f"{leave_code_col}{r}"].value or '').strip()
+            has_q_code = any(c in code_val for c in ['พ', 'ลป', 'ลก', 'น', 'บ', 'ค', 'ส', 'อ', 'ป']) and not code_val.startswith('=')
 
-            # 1. สแกนขาเดียว (Missing Punch) - ต้องไม่มีการแจ้งในระบบ และมีสแกนเพียงขาเดียวจริง
-            if not has_system_notification and ((has_in and not has_out) or (not has_in and has_out)):
-                scans_str = ", ".join(scans_list) if scans_list else str(scan_val or '')
-                missing_side = f"ลืมสแกนออก (มีเฉพาะเวลาเข้า {scans_str})" if has_in else f"ลืมสแกนเข้า (มีเฉพาะเวลาออก {scans_str})"
-                action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาออก' if has_in else 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาเข้า'
+            # หากมีรายการแจ้งในระบบแล้ว (มีใบแจ้งฯ หรือมีบันทึกการลาในช่อง G หรือรหัสวันลาในช่อง Q)
+            has_system_notification = has_leave or has_q_code
+
+            # 2. เวลาค่าจริงจากสแกนนิ้ว: ช่อง J (Time-In) และ K (Time-Out)
+            j_val = ws[f"{time_in_col}{r}"].value
+            k_val = ws[f"{time_out_col}{r}"].value
+            has_j = is_valid_time(j_val)
+            has_k = is_valid_time(k_val)
+
+            # 3. เวลาค่าที่ปรับตามการลาแล้ว: ช่อง L (Check-in) และ M (Check-Out)
+            l_val = ws[f"{checkin_col}{r}"].value
+            m_val = ws[f"{checkout_col}{r}"].value
+            has_l = is_valid_time(l_val)
+            has_m = is_valid_time(m_val)
+
+            # 4. สแกนดิบในช่อง E
+            scan_val = ws[f"{scan_col}{r}"].value
+            has_in_raw, has_out_raw, scans_list, e_dec, l_dec = check_fingerprint_scans(scan_val)
+
+            # === ดับเบิลเช็คทั้งค่าจริงและค่าที่ปรับตามการลาแล้ว ===
+            # ยืนยันเวลาเข้า (IN) หาก:
+            # - ช่อง L (ปรับตามการลาแล้ว) มีเวลาที่ถูกต้อง หรือ
+            # - ช่อง J (ค่าจริงจากสแกน) มีเวลาที่ถูกต้อง หรือ
+            # - สแกนดิบมีเวลาเข้า
+            in_confirmed = has_l or has_j or has_in_raw
+
+            # ยืนยันเวลาออก (OUT) หาก:
+            # - ช่อง M (ปรับตามการลาแล้ว) มีเวลาที่ถูกต้อง หรือ
+            # - ช่อง K (ค่าจริงจากสแกน) มีเวลาที่ถูกต้อง หรือ
+            # - สแกนดิบมีเวลาออก
+            out_confirmed = has_m or has_k or has_out_raw
+
+            # กรณีพิเศษ: มีสแกนตั้งแต่ 2 เวลาขึ้นไปและห่างกัน >= 1 ชม.
+            if len(scans_list) >= 2 and e_dec is not None and l_dec is not None and (l_dec - e_dec) >= 1.0:
+                in_confirmed = True
+                out_confirmed = True
+
+            # ถ้าทั้งเวลาเข้าและเวลาออกได้รับการยืนยันครบถ้วน -> ข้อมูลสมบูรณ์ ไม่มีความผิดปกติ
+            if in_confirmed and out_confirmed:
+                continue
+
+            # หากมีรายการแจ้งในระบบแล้ว (มีใบลา หรือใบแจ้งฯ ในช่อง G หรือรหัสวันลาในช่อง Q) -> ข้อมูลได้รับอนุมัติ/บันทึกแล้ว ไม่ถือว่าไม่มีแจ้ง
+            if has_system_notification:
+                continue
+
+            # --- ตรวจจับความผิดปกติที่แท้จริง ---
+            # 1. สแกนขาเดียว (Missing Punch) - มีเข้าแต่ขาดออก หรือ มีออกแต่ขาดเข้า
+            if in_confirmed and not out_confirmed:
+                time_in_str = format_time_val(l_val if has_l else (j_val if has_j else (scans_list[0] if scans_list else '')))
+                note = f"มีเวลาเข้า ({time_in_str})" if time_in_str else "มีเวลาเข้า"
+                detail = f"ลืมสแกนออก ({note})"
+                action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาออก'
                 anomalies.append({
                     'category': 'missing_punch',
                     'category_desc': 'ลืมสแกน (ขาเดียว)',
@@ -2938,15 +3018,41 @@ def analyze_attendance_anomalies(main_source, col_config=None):
                     'emp_name': emp_name,
                     'scan_raw': str(scan_val or '-'),
                     'scans_list': scans_list,
-                    'scans_str': scans_str,
-                    'detail': missing_side,
+                    'scans_str': time_in_str or str(scan_val or '-'),
+                    'item': 'ลืมสแกนออก',
+                    'note': note,
+                    'detail': detail,
+                    'action_needed': action
+                })
+                counts['missing_punch'] += 1
+                counts['total'] += 1
+
+            elif not in_confirmed and out_confirmed:
+                time_out_str = format_time_val(m_val if has_m else (k_val if has_k else (scans_list[-1] if scans_list else '')))
+                note = f"มีเวลาออก ({time_out_str})" if time_out_str else "มีเวลาออก"
+                detail = f"ลืมสแกนเข้า ({note})"
+                action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาเข้า'
+                anomalies.append({
+                    'category': 'missing_punch',
+                    'category_desc': 'ลืมสแกน (ขาเดียว)',
+                    'sheet': sheet_name,
+                    'date': dt.strftime('%d/%m/%Y'),
+                    'date_obj': dt,
+                    'emp_id': emp_id,
+                    'emp_name': emp_name,
+                    'scan_raw': str(scan_val or '-'),
+                    'scans_list': scans_list,
+                    'scans_str': time_out_str or str(scan_val or '-'),
+                    'item': 'ลืมสแกนเข้า',
+                    'note': note,
+                    'detail': detail,
                     'action_needed': action
                 })
                 counts['missing_punch'] += 1
                 counts['total'] += 1
 
             # 2. ไม่พบสแกนและไม่ลา (Unrecorded Absence) - ไม่มีสแกน และไม่มีการแจ้งในระบบ
-            elif not has_in and not has_out and not has_system_notification and not is_holiday and not is_sunday:
+            elif not in_confirmed and not out_confirmed and not is_holiday and not is_sunday:
                 anomalies.append({
                     'category': 'unrecorded_absence',
                     'category_desc': 'ไม่พบสแกนและไม่ลา',
@@ -2958,6 +3064,8 @@ def analyze_attendance_anomalies(main_source, col_config=None):
                     'scan_raw': '-',
                     'scans_list': [],
                     'scans_str': '-',
+                    'item': 'ไม่พบสแกนและไม่ลา',
+                    'note': 'ไม่พบสแกนนิ้วและไม่มีบันทึกการลา',
                     'detail': 'ไม่พบสแกนนิ้วในระบบ และไม่มีบันทึกข้อมูลการลาในตาราง',
                     'action_needed': 'ตรวจสอบว่าพนักงานขาดงาน หรือยังไม่ได้บันทึกใบลาที่ได้รับอนุมัติ'
                 })
@@ -3077,16 +3185,20 @@ def populate_unrecorded_sheet_in_workbook(wb, anomalies=None, filename="", col_c
         detail = a.get('detail', '')
         scans_str = a.get('scans_str', '')
 
-        if cat == 'missing_punch':
-            if 'ลืมสแกนเข้า' in detail:
-                item_name = 'ลืมสแกนเข้า'
-                note = f"มีเวลาออก ({scans_str})" if scans_str and scans_str != '-' else "มีเวลาออก"
+        item_name = a.get('item')
+        note = a.get('note')
+
+        if not item_name or not note:
+            if cat == 'missing_punch':
+                if 'ลืมสแกนเข้า' in detail:
+                    item_name = item_name or 'ลืมสแกนเข้า'
+                    note = note or (f"มีเวลาออก ({scans_str})" if scans_str and scans_str != '-' else "มีเวลาออก")
+                else:
+                    item_name = item_name or 'ลืมสแกนออก'
+                    note = note or (f"มีเวลาเข้า ({scans_str})" if scans_str and scans_str != '-' else "มีเวลาเข้า")
             else:
-                item_name = 'ลืมสแกนออก'
-                note = f"มีเวลาเข้า ({scans_str})" if scans_str and scans_str != '-' else "มีเวลาเข้า"
-        else:
-            item_name = 'ไม่พบสแกนและไม่ลา'
-            note = 'ไม่พบสแกนนิ้วและไม่มีบันทึกการลา'
+                item_name = item_name or 'ไม่พบสแกนและไม่ลา'
+                note = note or 'ไม่พบสแกนนิ้วและไม่มีบันทึกการลา'
 
         emp_id_val = a.get('emp_id', '')
         val_id = int(emp_id_val) if str(emp_id_val).isdigit() else str(emp_id_val)

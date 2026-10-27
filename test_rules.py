@@ -252,6 +252,87 @@ def test_afternoon_shift_and_leave_anomaly_exclusion():
     assert '9999' in ids, "9999 (ไม่มีใบแจ้ง และสแกนขาเดียว) must be in anomalies"
 
 
+def test_double_check_actual_and_adjusted_times():
+    """ทดสอบระบบดับเบิลเช็คทั้งค่าจริง (Col J, K) และค่าที่ปรับตามการลา (Col L, M) รวมถึง Col G และ Col Q"""
+    from datetime import time
+    from app import is_valid_time, format_time_val
+
+    # 1. ทดสอบ helper is_valid_time และ format_time_val
+    assert is_valid_time(time(7, 30)) is True
+    assert is_valid_time(time(13, 0)) is True
+    assert is_valid_time(time(0, 0)) is False
+    assert is_valid_time("13:00") is True
+    assert is_valid_time("07:30") is True
+    assert is_valid_time("ไม่ได้แสกน") is False
+    assert is_valid_time("ไม่ได้สแกน") is False
+    assert is_valid_time("0:00") is False
+    assert is_valid_time("00:00") is False
+    assert is_valid_time(None) is False
+    assert is_valid_time(0.0) is False
+
+    assert format_time_val(time(7, 30)) == "07:30"
+    assert format_time_val("13:00") == "13:00"
+
+    # 2. ทดสอบ Double-check ใน analyze_attendance_anomalies
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "15.10.26" # วันพฤหัสบดี (วันทำงานปกติ)
+    # Headers
+    ws['A1'] = 'AC-No'; ws['B1'] = 'Name'; ws['E1'] = 'Time'; ws['G1'] = 'Leave'
+    ws['J1'] = 'Time-In'; ws['K1'] = 'Time-Out'; ws['L1'] = 'Check-in'; ws['M1'] = 'Check-Out'; ws['Q1'] = 'Code'
+
+    # Case 1: 1001 มีค่าจริงใน J='13:00', K='18:30' (แม้ L, M ว่าง และ E ไม่มีสแกน) -> สมบูรณ์ ไม่เป็น anomaly
+    ws['A2'] = '1001'; ws['B2'] = 'นาย สมชาย ค่าจริง'; ws['E2'] = 'ไม่ได้แสกน'
+    ws['J2'] = '13:00'; ws['K2'] = '18:30'; ws['L2'] = None; ws['M2'] = None; ws['G2'] = ''; ws['Q2'] = '=+P2-1'
+
+    # Case 2: 1002 มีค่าปรับตามการลาใน L='07:30', M='18:30' (เช่น ลาครึ่งวันเช้า) -> สมบูรณ์ ไม่เป็น anomaly
+    ws['A3'] = '1002'; ws['B3'] = 'นางสาว สมศรี ค่าปรับ'; ws['E3'] = 'ไม่ได้แสกน'
+    ws['J3'] = None; ws['K3'] = None; ws['L3'] = '07:30'; ws['M3'] = '18:30'; ws['G3'] = ''; ws['Q3'] = '=+P3-1'
+
+    # Case 3: 1003 ขาดเวลาออก (มีเฉพาะเข้า L='07:30') และไม่มีใบแจ้ง -> ลืมสแกนออก
+    ws['A4'] = '1003'; ws['B4'] = 'นาย สมศักดิ์ ลืมออก'; ws['E4'] = 'ไม่ได้แสกน'
+    ws['J4'] = None; ws['K4'] = None; ws['L4'] = '07:30'; ws['M4'] = 'ไม่ได้แสกน'; ws['G4'] = ''; ws['Q4'] = '=+P4-1'
+
+    # Case 4: 1004 ขาดเวลาเข้า (มีเฉพาะออก K='18:30') และไม่มีใบแจ้ง -> ลืมสแกนเข้า
+    ws['A5'] = '1004'; ws['B5'] = 'นาง สมบูรณ์ ลืมเข้า'; ws['E5'] = 'ไม่ได้แสกน'
+    ws['J5'] = 'ไม่ได้แสกน'; ws['K5'] = '18:30'; ws['L5'] = None; ws['M5'] = None; ws['G5'] = ''; ws['Q5'] = '=+P5-1'
+
+    # Case 5: 1005 ไม่มีเวลาเข้า-ออกเลย แต่มีบันทึกการลาในช่อง G -> สมบูรณ์ ไม่เป็น anomaly
+    ws['A6'] = '1005'; ws['B6'] = 'นาย มาลา ลาป่วย'; ws['E6'] = 'ไม่ได้แสกน'
+    ws['J6'] = None; ws['K6'] = None; ws['L6'] = None; ws['M6'] = None; ws['G6'] = 'ลาป่วย 4.5 ชม.'; ws['Q6'] = '=+P6-1'
+
+    # Case 6: 1006 ไม่มีเวลาเข้า-ออกเลย แต่มีรหัสวันลาในช่อง Q -> สมบูรณ์ ไม่เป็น anomaly
+    ws['A7'] = '1006'; ws['B7'] = 'นาย ลาพัก ร้อน'; ws['E7'] = 'ไม่ได้แสกน'
+    ws['J7'] = None; ws['K7'] = None; ws['L7'] = None; ws['M7'] = None; ws['G7'] = ''; ws['Q7'] = 'พ'
+
+    # Case 7: 1007 ไม่มีเวลาเข้า-ออก และไม่มีบันทึกการลา -> ไม่พบสแกนและไม่ลา (Unrecorded Absence)
+    ws['A8'] = '1007'; ws['B8'] = 'นาย ขาดงาน แน่นอน'; ws['E8'] = 'ไม่ได้แสกน'
+    ws['J8'] = None; ws['K8'] = None; ws['L8'] = None; ws['M8'] = None; ws['G8'] = ''; ws['Q8'] = '=+P8-1'
+
+    res = analyze_attendance_anomalies(wb)
+    anomalies = res['anomalies']
+    anomaly_map = {a['emp_id']: a for a in anomalies}
+
+    # ตรวจสอบการคัดกรอง
+    assert '1001' not in anomaly_map, "1001 (มีค่าจริง J/K) ต้องไม่อยู่ใน anomalies"
+    assert '1002' not in anomaly_map, "1002 (มีค่าปรับ L/M) ต้องไม่อยู่ใน anomalies"
+    assert '1005' not in anomaly_map, "1005 (มีลาป่วยใน Col G) ต้องไม่อยู่ใน anomalies"
+    assert '1006' not in anomaly_map, "1006 (มีรหัสวันลาใน Col Q) ต้องไม่อยู่ใน anomalies"
+
+    # ตรวจสอบคนที่ผิดปกติจริง
+    assert '1003' in anomaly_map, "1003 ต้องถูกตรวจจับว่าผิดปกติ"
+    assert anomaly_map['1003']['item'] == 'ลืมสแกนออก'
+    assert '07:30' in anomaly_map['1003']['note']
+
+    assert '1004' in anomaly_map, "1004 ต้องถูกตรวจจับว่าผิดปกติ"
+    assert anomaly_map['1004']['item'] == 'ลืมสแกนเข้า'
+    assert '18:30' in anomaly_map['1004']['note']
+
+    assert '1007' in anomaly_map, "1007 ต้องถูกตรวจจับว่าขาดงาน"
+    assert anomaly_map['1007']['category'] == 'unrecorded_absence'
+
+
 if __name__ == "__main__":
     test_checkout_time_rounding()
     test_fingerprint_scans()
@@ -263,4 +344,5 @@ if __name__ == "__main__":
     test_company_holidays()
     test_unrecorded_sheet_grouping()
     test_afternoon_shift_and_leave_anomaly_exclusion()
+    test_double_check_actual_and_adjusted_times()
     print("ALL TESTS PASSED SUCCESSFULLY! (100% OK)")
