@@ -63,7 +63,7 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
 
 
