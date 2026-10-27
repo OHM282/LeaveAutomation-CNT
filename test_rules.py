@@ -221,6 +221,37 @@ def test_unrecorded_sheet_grouping():
     assert ws.cell(6, 2).value == 'กัลยกร  นิยมเดชา' and ws.cell(6, 4).value == '19/10/2026'
 
 
+def test_afternoon_shift_and_leave_anomaly_exclusion():
+    """ทดสอบกรณีสแกนบ่าย 2 เวลา (เข้า 12:54 ออก 18:31) และกรณีมีใบลาในระบบ ต้องไม่ถูกฟ้องว่าลืมสแกนเข้า"""
+    # 1. ทดสอบ check_fingerprint_scans เมื่อมีสแกนบ่าย 2 เวลา
+    h_in, h_out, scans, e_min, e_max = check_fingerprint_scans("12:54 12:54 18:31 18:31")
+    assert h_in is True, f"12:54 and 18:31 must have has_in=True (got {h_in})"
+    assert h_out is True, f"12:54 and 18:31 must have has_out=True (got {h_out})"
+
+    # 2. ทดสอบ analyze_attendance_anomalies เมื่อมีบันทึกการลา
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "15.10.26"
+    # Row 1 Headers
+    ws['A1'] = 'AC-No'; ws['B1'] = 'Name'; ws['E1'] = 'Time'; ws['G1'] = 'Leave'; ws['Q1'] = 'Code'
+    # Row 2: นฤมล ฉลาดมาก มีสแกนบ่าย 12:54, 18:31 และมีลาป่วย 4.5 ชม.
+    ws['A2'] = '5614'; ws['B2'] = 'นฤมล ฉลาดมาก'; ws['E2'] = '12:54 18:31'; ws['G2'] = 'ลาป่วย 4.5 ชม.'; ws['Q2'] = '=+P2-1'
+    # Row 3: พนักงานที่มีใบแจ้งฯ ขาเดียว (เช่น 07:15)
+    ws['A3'] = '5688'; ws['B3'] = 'กัณมน กิบุญมา'; ws['E3'] = '07:15'; ws['G3'] = 'มีใบแจ้งฯ'; ws['Q3'] = '10'
+    # Row 4: พนักงานที่ลืมสแกนจริง และไม่มีใบแจ้ง
+    ws['A4'] = '9999'; ws['B4'] = 'ทดสอบ ลืมสแกน'; ws['E4'] = '07:15'; ws['G4'] = ''; ws['Q4'] = '=+P4-1'
+
+    res = analyze_attendance_anomalies(wb)
+    anomalies = res['anomalies']
+    
+    # นฤมล (5614) และ กัณมน (5688) ต้องไม่อยู่ใน anomalies
+    ids = [a['emp_id'] for a in anomalies]
+    assert '5614' not in ids, "5614 (นฤมล ฉลาดมาก) must NOT be in anomalies"
+    assert '5688' not in ids, "5688 (มีใบแจ้งฯ) must NOT be in anomalies"
+    assert '9999' in ids, "9999 (ไม่มีใบแจ้ง และสแกนขาเดียว) must be in anomalies"
+
+
 if __name__ == "__main__":
     test_checkout_time_rounding()
     test_fingerprint_scans()
@@ -231,4 +262,5 @@ if __name__ == "__main__":
     test_parse_leave_duration()
     test_company_holidays()
     test_unrecorded_sheet_grouping()
+    test_afternoon_shift_and_leave_anomaly_exclusion()
     print("ALL TESTS PASSED SUCCESSFULLY! (100% OK)")

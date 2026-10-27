@@ -431,7 +431,13 @@ def check_fingerprint_scans(val):
             
     earliest_dec = min(dec_times) if dec_times else None
     latest_dec = max(dec_times) if dec_times else None
-    
+
+    # กรณีมีสแกนตั้งแต่ 2 เวลาขึ้นไปและห่างกัน >= 1 ชม. (เช่น เข้า 12:54 ออก 18:31 หรือ เข้า 07:18 ออก 11:31)
+    # แสดงว่ามีสแกนทั้งขาเข้าและขาออกครบถ้วน
+    if len(scans_list) >= 2 and earliest_dec is not None and latest_dec is not None and (latest_dec - earliest_dec) >= 1.0:
+        has_in = True
+        has_out = True
+
     return has_in, has_out, scans_list, earliest_dec, latest_dec
 
 
@@ -2908,10 +2914,17 @@ def analyze_attendance_anomalies(main_source, col_config=None):
             scan_val = ws[f"{scan_col}{r}"].value
             has_in, has_out, scans_list, earliest_dec, latest_dec = check_fingerprint_scans(scan_val)
             leave_val = str(ws[f"{leave_type_col}{r}"].value or '').strip()
+            if leave_val.lower() == 'none':
+                leave_val = ''
             code_val = str(ws[f"{leave_code_col}{r}"].value or '').strip()
+            has_q_code = any(c in code_val for c in ['พ', 'ลป', 'ลก', 'น', 'บ', 'ค', 'ส', 'อ']) and not code_val.startswith('=')
+            
+            # หากมีรายการแจ้งในระบบแล้ว (มีใบแจ้งฯ หรือมีบันทึกการลาในช่อง G หรือรหัสวันลาในช่อง Q)
+            # จะไม่ถือว่าเป็น "ผู้ที่ไม่มีการแจ้งออนไลน์"
+            has_system_notification = bool(leave_val or has_q_code)
 
-            # 1. สแกนขาเดียว (Missing Punch)
-            if (has_in and not has_out) or (not has_in and has_out):
+            # 1. สแกนขาเดียว (Missing Punch) - ต้องไม่มีการแจ้งในระบบ และมีสแกนเพียงขาเดียวจริง
+            if not has_system_notification and ((has_in and not has_out) or (not has_in and has_out)):
                 scans_str = ", ".join(scans_list) if scans_list else str(scan_val or '')
                 missing_side = f"ลืมสแกนออก (มีเฉพาะเวลาเข้า {scans_str})" if has_in else f"ลืมสแกนเข้า (มีเฉพาะเวลาออก {scans_str})"
                 action = 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาออก' if has_in else 'ติดตามขอใบแจ้งเวลาทำงานเพื่อยืนยันเวลาเข้า'
@@ -2932,8 +2945,8 @@ def analyze_attendance_anomalies(main_source, col_config=None):
                 counts['missing_punch'] += 1
                 counts['total'] += 1
 
-            # 2. ไม่พบสแกนและไม่ลา (Unrecorded Absence)
-            elif not has_in and not has_out and not leave_val and not code_val and not is_holiday and not is_sunday:
+            # 2. ไม่พบสแกนและไม่ลา (Unrecorded Absence) - ไม่มีสแกน และไม่มีการแจ้งในระบบ
+            elif not has_in and not has_out and not has_system_notification and not is_holiday and not is_sunday:
                 anomalies.append({
                     'category': 'unrecorded_absence',
                     'category_desc': 'ไม่พบสแกนและไม่ลา',
