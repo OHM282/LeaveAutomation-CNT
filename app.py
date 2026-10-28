@@ -63,7 +63,7 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
 
 
@@ -433,12 +433,6 @@ def check_fingerprint_scans(val):
             
     earliest_dec = min(dec_times) if dec_times else None
     latest_dec = max(dec_times) if dec_times else None
-
-    # กรณีมีสแกนตั้งแต่ 2 เวลาขึ้นไปและห่างกัน >= 1 ชม. (เช่น เข้า 12:54 ออก 18:31 หรือ เข้า 07:18 ออก 11:31)
-    # แสดงว่ามีสแกนทั้งขาเข้าและขาออกครบถ้วน
-    if len(scans_list) >= 2 and earliest_dec is not None and latest_dec is not None and (latest_dec - earliest_dec) >= 1.0:
-        has_in = True
-        has_out = True
 
     return has_in, has_out, scans_list, earliest_dec, latest_dec
 
@@ -1371,7 +1365,11 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
         h_in, h_out, scans_list, e_min, e_max = check_fingerprint_scans(scan_val)
         scans_str = ", ".join(scans_list) if scans_list else "-"
 
-        if h_in and h_out:
+        has_morning_scan = any(4.0 <= to_decimal_hours(s) < 12.0 for s in scans_list) if scans_list else (e_min is not None and 4.0 <= e_min < 12.0)
+        has_evening_scan = any(to_decimal_hours(s) >= 16.5 for s in scans_list) if scans_list else (e_max is not None and e_max >= 16.5)
+
+        # 1. ข้ามกรณีมีสแกนครบทั้งเช้า (< 12:00) และเย็น (>= 16:30) จริงแล้ว
+        if has_morning_scan and has_evening_scan:
             counts['skip_scan'] += 1
             counts['attend_skips'] += 1
             evaluated_items.append({
@@ -1384,7 +1382,8 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
             })
             continue
 
-        if target_col == 'L' and h_in:
+        # 2. ข้ามกรณีใบแจ้งเข้าเช้า (ช่อง L เช่น 07:30) แต่มีสแกนเข้างานช่วงเช้า (< 12:00) แล้วจริง
+        if target_col == 'L' and has_morning_scan:
             counts['skip_scan'] += 1
             counts['attend_skips'] += 1
             evaluated_items.append({
@@ -1397,7 +1396,8 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
             })
             continue
 
-        if target_col == 'M' and h_out and e_max is not None and e_max >= 16.5:
+        # 3. ข้ามกรณีใบแจ้งออกเย็น (ช่อง M เช่น 16:30/17:00) แต่มีสแกนออกงานเย็น (>= 16:30) แล้วจริง
+        if target_col == 'M' and has_evening_scan:
             counts['skip_scan'] += 1
             counts['attend_skips'] += 1
             evaluated_items.append({

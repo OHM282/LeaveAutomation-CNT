@@ -223,10 +223,11 @@ def test_unrecorded_sheet_grouping():
 
 def test_afternoon_shift_and_leave_anomaly_exclusion():
     """ทดสอบกรณีสแกนบ่าย 2 เวลา (เข้า 12:54 ออก 18:31) และกรณีมีใบลาในระบบ ต้องไม่ถูกฟ้องว่าลืมสแกนเข้า"""
-    # 1. ทดสอบ check_fingerprint_scans เมื่อมีสแกนบ่าย 2 เวลา
+    # 1. ทดสอบ check_fingerprint_scans เมื่อมีสแกนบ่าย (12:54, 18:31)
     h_in, h_out, scans, e_min, e_max = check_fingerprint_scans("12:54 12:54 18:31 18:31")
-    assert h_in is True, f"12:54 and 18:31 must have has_in=True (got {h_in})"
-    assert h_out is True, f"12:54 and 18:31 must have has_out=True (got {h_out})"
+    assert h_in is False, f"12:54 is afternoon scan, so has_in must be False (got {h_in})"
+    assert h_out is True, f"18:31 is afternoon scan, so has_out must be True (got {h_out})"
+    assert len(scans) == 2 and "12:54" in scans and "18:31" in scans
 
     # 2. ทดสอบ analyze_attendance_anomalies เมื่อมีบันทึกการลา
     import openpyxl
@@ -250,6 +251,54 @@ def test_afternoon_shift_and_leave_anomaly_exclusion():
     assert '5614' not in ids, "5614 (นฤมล ฉลาดมาก) must NOT be in anomalies"
     assert '5688' not in ids, "5688 (มีใบแจ้งฯ) must NOT be in anomalies"
     assert '9999' in ids, "9999 (ไม่มีใบแจ้ง และสแกนขาเดียว) must be in anomalies"
+
+
+def test_afternoon_scan_with_morning_attendance_slip():
+    """ทดสอบกรณีพนักงานสแกนเข้าบ่าย (เช่น 13:01 18:42) และยื่นใบแจ้งเวลาเช้า (07:30) ระบบต้องบันทึกใบแจ้งลงตาราง"""
+    from datetime import date, time
+    from app import evaluate_all_records
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "22.10.26"
+    ws['A1'] = 'AC-No'; ws['B1'] = 'Name'; ws['E1'] = 'Time'; ws['G1'] = 'Leave'
+    ws['J1'] = 'Time-In'; ws['K1'] = 'Time-Out'; ws['L1'] = 'Check-in'; ws['M1'] = 'Check-Out'; ws['Q1'] = 'Total'
+
+    # Row 2: 4655 นายมานุพงษ์ สุโภคิน สแกนบ่าย 13:01 และ 18:42
+    ws['A2'] = '4655'
+    ws['B2'] = 'มานุพงษ์ สุโภคิน'
+    ws['E2'] = '13:01 13:01 18:42 18:42'
+    ws['J2'] = '13:30'
+    ws['K2'] = '18:30'
+    ws['L2'] = '13:30'
+    ws['M2'] = '18:30'
+    ws['G2'] = None
+    ws['Q2'] = '=+P2-1'
+
+    sheet_date_map = {date(2026, 10, 22): "22.10.26"}
+
+    # ใบแจ้งการมาทำงานเวลาเช้า 7:30
+    att_records = [{
+        'emp_id': '4655',
+        'emp_raw': 'A04655 : นายมานุพงษ์ สุโภคิน',
+        'date': date(2026, 10, 22),
+        'target_col': 'L',
+        'target_time': time(7, 30),
+        'orig_time': '7:30'
+    }]
+
+    summary, items = evaluate_all_records(wb, sheet_date_map, [], att_records)
+    
+    assert summary['updates_count'] == 1, f"Expected 1 update, got {summary['updates_count']}"
+    assert summary['skips_count'] == 0, f"Expected 0 skips, got {summary['skips_count']}"
+    
+    item = items[0]
+    assert item['status_type'] == 'update', f"Status must be update, got {item['status']}"
+    assert 'L2' in item['cell_updates']
+    assert item['cell_updates']['L2'] == time(7, 30)
+    assert 'G2' in item['cell_updates']
+    assert 'มีใบแจ้งฯ' in item['cell_updates']['G2']
 
 
 def test_double_check_actual_and_adjusted_times():
@@ -344,5 +393,6 @@ if __name__ == "__main__":
     test_company_holidays()
     test_unrecorded_sheet_grouping()
     test_afternoon_shift_and_leave_anomaly_exclusion()
+    test_afternoon_scan_with_morning_attendance_slip()
     test_double_check_actual_and_adjusted_times()
     print("ALL TESTS PASSED SUCCESSFULLY! (100% OK)")
