@@ -4832,35 +4832,36 @@ class ModernCustomTkinterApp:
         utility_box = ctk.CTkFrame(header_top, fg_color="transparent")
         utility_box.grid(row=0, column=1, sticky="e")
 
+        self.font_util = ctk.CTkFont(family=self.font_family, size=12, weight="bold")
+
         self.btn_update = ctk.CTkButton(
             utility_box,
             text=f"อัปเดต v{APP_VERSION}",
-            font=self.font_btn,
+            font=self.font_util,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             text_color="#ffffff",
             height=32,
-            width=110,
-            corner_radius=6,
+            corner_radius=8,
             command=self.open_updater
         )
         self.btn_update.pack(side="left", padx=(0, 8))
 
-        # สเกลเลอร์ปรับขนาดตัวอักษรสำหรับผู้สูงวัย / สบายตา
+        # สเกลเลอร์ปรับขนาดตัวอักษรสำหรับผู้สูงวัย / สบายตา (Dynamic Auto-Fitting ป้องกันตัวเลขถูกตัดขอบ)
         self.seg_font = ctk.CTkSegmentedButton(
             utility_box,
             values=["100%", "115%", "125%"],
             variable=self.font_scale_var,
             command=self.on_font_scale_changed,
-            font=self.font_sm,
+            font=self.font_util,
             height=32,
-            width=135,
+            corner_radius=8,
             selected_color=self.color_primary,
             selected_hover_color=self.color_primary_hover,
             unselected_color="#1e293b",
             unselected_hover_color="#334155",
             text_color="#ffffff",
-            dynamic_resizing=False
+            dynamic_resizing=True
         )
         self.seg_font.pack(side="left")
 
