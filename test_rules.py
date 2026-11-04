@@ -7,6 +7,7 @@ and Thai employee name similarity matching.
 from datetime import time, date
 from app import (
     calculate_checkout_time,
+    calculate_holiday_checkout_time,
     check_fingerprint_scans,
     clean_thai_name,
     check_name_similarity,
@@ -460,6 +461,38 @@ def test_auto_detect_columns_and_buddhist_era_sheets():
     assert items[0]['cell_updates']['P2'] == 'ป'
 
 
+def test_holiday_checkout_rule():
+    import openpyxl
+
+    # 1. ทดสอบการปัดเศษเวลาออกวันหยุด (ช่วง 12:00 - 16:00)
+    assert calculate_holiday_checkout_time(15 + 25/60.0) == time(15, 0), "15:25 -> 15:00"
+    assert calculate_holiday_checkout_time(15 + 7/60.0) == time(15, 0), "15:07 -> 15:00"
+    assert calculate_holiday_checkout_time(15 + 35/60.0) == time(15, 30), "15:35 -> 15:30"
+    assert calculate_holiday_checkout_time(14 + 45/60.0) == time(14, 30), "14:45 -> 14:30"
+    assert calculate_holiday_checkout_time(12 + 35/60.0) == time(12, 30), "12:35 -> 12:30"
+
+    # 2. ทดสอบ evaluate_all_records บนชีทวันหยุด (23.10.69 - วันปิยมหาราช)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "23.10.69"
+    ws.append(["AC-No", "Name", "Department", "Date", "Time", "SITE", "Left", "Right", "Time-In", "Time-Out", "Check-in", "Check-Out", "H1", "H2", "H3", "Total", "Leave"])
+    # แถว 2: มานุสรา พวงโอส สแกน 08:05 - 15:25 ในวันหยุด
+    ws.append(["5044", "น.ส. อนุสรา พวงโอส", "STAFF_CN.1856", "23/10/2026", "08:05 08:05 15:25 15:25", "", "08:05", "15:25", "8:30", "15:00", "8:30", "ไม่ได้แสกน", "0:00", "0", "0", "0.00", "น"])
+    # แถว 3: พนักงานที่หยุด ไม่ได้มาทำงาน
+    ws.append(["4994", "นายอนุสรณ์ ภาษา", "STAFF_CN.1856", "23/10/2026", "", "", "", "", "", "", "ไม่ได้แสกน", "ไม่ได้แสกน", "0:00", "0", "0", "0.00", "น"])
+
+    sheet_date_map = {date(2026, 10, 23): "23.10.69"}
+    summary, items = evaluate_all_records(wb, sheet_date_map, [], [])
+
+    assert summary['holiday_updates'] == 1, f"Expected 1 holiday update, got {summary['holiday_updates']}"
+    assert len(items) == 1
+    item = items[0]
+    assert item['emp_id'] == '5044'
+    assert item['type'] == 'วันหยุด/พิเศษ'
+    assert item['status_type'] == 'update'
+    assert item['cell_updates']['L2'] == time(15, 0) # Check-Out column is Col L in this layout (or M depending on cols)
+
+
 if __name__ == "__main__":
     test_checkout_time_rounding()
     test_fingerprint_scans()
@@ -474,4 +507,5 @@ if __name__ == "__main__":
     test_afternoon_scan_with_morning_attendance_slip()
     test_double_check_actual_and_adjusted_times()
     test_auto_detect_columns_and_buddhist_era_sheets()
+    test_holiday_checkout_rule()
     print("ALL TESTS PASSED SUCCESSFULLY! (100% OK)")

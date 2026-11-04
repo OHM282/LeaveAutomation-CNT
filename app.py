@@ -63,7 +63,7 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.2.6"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
 DEFAULT_UI_FONT = "Tahoma"
 
@@ -388,6 +388,23 @@ def calculate_checkout_time(time_val):
         return time(h, 0)
     else:
         return time(h, 30)
+
+
+def calculate_holiday_checkout_time(latest_dec):
+    """
+    คำนวณเวลาออกสำหรับวันหยุด/วันอาทิตย์ (ช่วงบ่าย 12:00 - 16:00 น.):
+    ปัดเศษนาทีลงช่วงละ 30 นาที (:00 หรือ :30) สอดคล้องกับสูตร FLOOR ของ Excel
+    เช่น 15:25 -> 15:00
+        15:07 -> 15:00
+        15:35 -> 15:30
+        14:50 -> 14:30
+    """
+    if latest_dec is None:
+        return None
+    h = int(latest_dec)
+    m = int(round((latest_dec - h) * 60))
+    rounded_m = 30 if m >= 30 else 0
+    return time(h, rounded_m)
 
 
 def check_fingerprint_scans(val):
@@ -1599,6 +1616,70 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
             'audit_entry': {"sheet": sheet_name, "emp_id": rec['emp_id'], "input_name": rec['emp_raw'], "sheet_name": s_name, "type": "แจ้งเวลา", "status": "✅ อัปเดตสำเร็จ", "scans": scans_str, "detail": action_str}
         })
 
+    # 3. ตรวจสอบและแก้ไขเวลาออกในวันหยุด/วันอาทิตย์ (Holiday / Sunday Work Checkout Fix)
+    # สำหรับคนที่มาทำงานวันหยุด แล้วสแกนออกช่วง 12:00 - 16:00 น. ซึ่งสูตร Excel เดิมจะเด้งเป็น "ไม่ได้แสกน"
+    assigned_checkouts = {coord for it in evaluated_items for coord in it.get('cell_updates', {}).keys()}
+    counts['holiday_updates'] = 0
+
+    for dt, sheet_name in sheet_date_map.items():
+        ws = wb[sheet_name]
+        is_holiday, holiday_name = is_company_holiday(dt, ws, leave_code_col=leave_code_col)
+        is_sunday = (dt.weekday() == 6)
+        if not (is_holiday or is_sunday):
+            continue
+
+        day_label = holiday_name if is_holiday else "วันอาทิตย์"
+        emp_map = sheet_emp_id_map.get(sheet_name, {})
+
+        for eid, (row, raw_name) in emp_map.items():
+            checkout_coord = f"{checkout_col}{row}"
+            if checkout_coord in assigned_checkouts:
+                continue
+            if (eid, dt) in full_day_leaves:
+                continue
+
+            scan_val = ws[f"{scan_col}{row}"].value
+            has_in, has_out, scans_list, earliest_dec, latest_dec = check_fingerprint_scans(scan_val)
+
+            # ต้องมีสแกนออกช่วงบ่ายระหว่าง 12:00 ถึงก่อน 16:00 น.
+            if has_out and latest_dec is not None and 12.0 <= latest_dec < 16.0:
+                target_checkout = calculate_holiday_checkout_time(latest_dec)
+                if not target_checkout:
+                    continue
+
+                curr_val = ws[checkout_coord].value
+                curr_dec = to_decimal_hours(curr_val)
+                target_dec = target_checkout.hour + target_checkout.minute / 60.0
+
+                # หากในเซลล์เป็นเวลานี้อยู่แล้ว ไม่ต้องอัปเดตซ้ำ
+                if curr_dec is not None and abs(curr_dec - target_dec) < 0.01:
+                    continue
+
+                time_label = f"{target_checkout.hour}:{target_checkout.minute:02d}"
+                scans_str = ", ".join(scans_list) if scans_list else "-"
+                action_str = f"บันทึกเวลาออกวันหยุดช่อง {checkout_coord} ➔ {time_label} (สแกน {scans_str}) แก้ปัญหา 'ไม่ได้แสกน'"
+
+                cell_updates = {checkout_coord: target_checkout}
+                assigned_checkouts.add(checkout_coord)
+
+                counts['update'] += 1
+                counts['holiday_updates'] += 1
+
+                evaluated_items.append({
+                    'sheet': sheet_name, 'date': dt, 'emp_id': eid,
+                    'input_name': raw_name, 'sheet_name': raw_name, 'type': 'วันหยุด/พิเศษ',
+                    'status': '✅ จะอัปเดต', 'status_type': 'update',
+                    'scans': scans_str, 'target_cells': checkout_coord,
+                    'action': action_str, 'detail': f"ทำงาน{day_label} สแกนออก {scans_str} ➔ ปรับเวลาออก {time_label}",
+                    'row': row, 'cell_updates': cell_updates,
+                    'audit_entry': {
+                        "sheet": sheet_name, "emp_id": eid, "input_name": raw_name,
+                        "sheet_name": raw_name, "type": "วันหยุด/พิเศษ",
+                        "status": "✅ อัปเดตเวลาออกวันหยุด", "scans": scans_str,
+                        "detail": action_str
+                    }
+                })
+
     target_dates = set(sheet_date_map.keys())
     d_min = min(target_dates) if target_dates else date.today()
     d_max = max(target_dates) if target_dates else date.today()
@@ -1611,6 +1692,7 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
         'leave_skips': counts['leave_skips'],
         'attend_updates': counts['attend_updates'],
         'attend_skips': counts['attend_skips'],
+        'holiday_updates': counts.get('holiday_updates', 0),
         'skip_scan_count': counts['skip_scan'],
         'skip_dup_count': counts['skip_dup'],
         'conflict_count': counts['conflict'],
@@ -1889,13 +1971,13 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
         attendance_records = parse_attendance_records(df_att, target_dates, log_callback)
         log_callback(f"✅ คัดกรองข้อมูลแจ้งเวลาที่ตรงกับรอบไฟล์ STAFF TIME ได้ {len(attendance_records)} รายการ")
 
-    if not leave_records and not attendance_records:
+    progress_callback(30)
+    summary, evaluated_items = evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, cfg)
+
+    if not leave_records and not attendance_records and summary.get('updates_count', 0) == 0:
         wb.close()
         log_callback("\n⚠️ ไม่พบข้อมูลที่ตรงกับรอบวันที่ของไฟล์ STAFF TIME เลย กรุณาตรวจสอบวันที่ในไฟล์นำเข้า")
         return None, None, 0, 0
-
-    progress_callback(30)
-    summary, evaluated_items = evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, cfg)
 
     audit_rows = []
     log_callback("\n⚙️ กำลังบันทึกข้อมูลลงในแต่ละชีท (พร้อม Double-Check ชื่อ-รหัส)...")
@@ -1932,6 +2014,8 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
     for dt, sheet_name in sheet_date_map.items():
         ws = wb[sheet_name]
         is_holiday, holiday_name = is_company_holiday(dt, ws, leave_code_col=leave_code_col)
+        is_sunday = (dt.weekday() == 6)
+        is_holiday_or_sunday = is_holiday or is_sunday
         for r in range(start_row, ws.max_row + 1):
             for col_letter in [checkin_col, checkout_col]:
                 c = ws[f"{col_letter}{r}"]
@@ -1948,15 +2032,15 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
                 q_cell.value = re.sub(r'/[ก-๙A-Za-z]+$', '', q_val)
 
             # ตรวจสอบวันหยุดบริษัทสำหรับทุกแถว:
-            # - คนไม่มีสแกน บังคับ leave_code_col เป็น 'น' และช่อง leave_type_col ต้องว่าง
+            # - คนไม่มีสแกน บังคับ leave_code_col เป็น 'น' (ถ้าเป็นวันหยุดนักขัตฤกษ์) และช่อง leave_type_col ต้องว่าง
             # - คนมีสแกน ปล่อยตามสูตร (ห้ามเป็น 'น') และช่อง leave_type_col ว่าง
-            if is_holiday and ws[f"{emp_name_col}{r}"].value:
+            if is_holiday_or_sunday and ws[f"{emp_name_col}{r}"].value:
                 scan_val = ws[f"{scan_col}{r}"].value
                 h_in, h_out, _, _, _ = check_fingerprint_scans(scan_val)
                 g_cell = ws[f"{leave_type_col}{r}"]
                 g_val = str(g_cell.value or '').strip()
                 if not h_in and not h_out:
-                    if q_val != 'น':
+                    if is_holiday and q_val != 'น':
                         q_cell.value = 'น'
                     if g_val and g_val != 'None':
                         g_cell.value = None
@@ -2010,6 +2094,8 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
     log_callback("ประมวลผลเสร็จสิ้นสมบูรณ์แบบ 100%")
     log_callback(f"  • การลาที่ได้รับการอนุมัติ: อัปเดต {summary['leave_updates']} จุด, ข้าม {summary['leave_skips']} จุด")
     log_callback(f"  • ใบแจ้งการมาทำงาน: อัปเดต {summary['attend_updates']} จุด, ข้าม {summary['attend_skips']} จุด")
+    if summary.get('holiday_updates', 0) > 0:
+        log_callback(f"  • เวลาออกวันหยุด/วันอาทิตย์ (แก้ปัญหา 'ไม่ได้แสกน'): อัปเดต {summary['holiday_updates']} จุด")
     log_callback(f"บันทึกไฟล์ที่: {output_filepath}")
     if report_filepath:
         log_callback(f"ไฟล์รายงานตรวจสอบ: {report_filepath}")
