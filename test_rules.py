@@ -16,7 +16,13 @@ from app import (
     is_company_holiday,
     COMPANY_HOLIDAYS_2026,
     populate_unrecorded_sheet_in_workbook,
-    analyze_attendance_anomalies
+    analyze_attendance_anomalies,
+    convert_year_to_ce,
+    detect_daily_sheet_columns,
+    resolve_workbook_columns,
+    get_formula_pattern_for_col,
+    map_workbook_sheets,
+    evaluate_all_records
 )
 
 
@@ -382,6 +388,78 @@ def test_double_check_actual_and_adjusted_times():
     assert anomaly_map['1007']['category'] == 'unrecorded_absence'
 
 
+def test_auto_detect_columns_and_buddhist_era_sheets():
+    """ทดสอบระบบตรวจจับคอลัมน์อัตโนมัติ (ทั้งฟอร์มเดิมและฟอร์มใหม่) และการแปลงปี พ.ศ. 2 หลักเป็น ค.ศ."""
+    import openpyxl
+
+    # 1. ทดสอบการแปลงปี
+    assert convert_year_to_ce(26) == 2026
+    assert convert_year_to_ce(69) == 2026
+    assert convert_year_to_ce(2569) == 2026
+    assert convert_year_to_ce(2026) == 2026
+    assert convert_year_to_ce(70) == 2027
+
+    # 2. ทดสอบจำลองโครงสร้างฟอร์มใหม่ (A, B, E, F, I, J, K, L, P)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "02.11.69" # พ.ศ. 2569 -> ค.ศ. 2026
+    # Headers in Row 1 (New Layout without SITE column)
+    headers = [
+        (1, 'AC-No'), (2, 'Name'), (3, 'Department'), (4, 'Date'), (5, 'Time'),
+        (7, 'Left'), (8, 'Right'), (9, 'Time-In'), (10, 'Time-Out'),
+        (11, 'Check-in'), (12, 'Check-Out'), (16, 'Total')
+    ]
+    for col_idx, h_text in headers:
+        ws.cell(1, col_idx).value = h_text
+
+    # Formulas in Row 2
+    ws.cell(2, 1).value = '4148'
+    ws.cell(2, 2).value = 'อนุวัติ มูลสารี'
+    ws.cell(2, 5).value = None # ไม่มีสแกน
+    ws.cell(2, 16).value = '=IF(O2=0, 0, O2-1)'
+
+    # เพิ่มชีทที่ไม่ใช่ชีทรายวัน
+    wb.create_sheet(title='ไม่มีแจ้งในระบบ')
+    wb.create_sheet(title='ชั่วโมง.01-14.11.69')
+    wb.create_sheet(title='DEMO')
+
+    # ทดสอบ map_workbook_sheets
+    mapped = map_workbook_sheets(wb)
+    assert date(2026, 11, 2) in mapped, "02.11.69 must be mapped to 2026-11-02"
+    assert len(mapped) == 1, f"Expected only 1 daily sheet, got {len(mapped)}"
+
+    # ทดสอบ detect_daily_sheet_columns
+    detected = detect_daily_sheet_columns(ws)
+    assert detected['emp_id_col'] == 'A'
+    assert detected['emp_name_col'] == 'B'
+    assert detected['scan_col'] == 'E'
+    assert detected['leave_type_col'] == 'F', f"Expected F for leave_type, got {detected['leave_type_col']}"
+    assert detected['time_in_col'] == 'I', f"Expected I for time_in, got {detected['time_in_col']}"
+    assert detected['time_out_col'] == 'J', f"Expected J for time_out, got {detected['time_out_col']}"
+    assert detected['checkin_col'] == 'K', f"Expected K for checkin, got {detected['checkin_col']}"
+    assert detected['checkout_col'] == 'L', f"Expected L for checkout, got {detected['checkout_col']}"
+    assert detected['leave_code_col'] == 'P', f"Expected P for leave_code, got {detected['leave_code_col']}"
+
+    # ทดสอบ get_formula_pattern_for_col
+    pat = get_formula_pattern_for_col(ws, 'P')
+    assert pat.format(row=15) == '=IF(O15=0, 0, O15-1)'
+
+    # ทดสอบ evaluate_all_records บนฟอร์มใหม่
+    leave_records = [{
+        'emp_id': '4148',
+        'emp_raw': 'A04148 : นายอนุวัติ มูลสารี',
+        'date': date(2026, 11, 2),
+        'leave_type_raw': 'ลาป่วย',
+        'is_partial': False,
+        'hours': None
+    }]
+    summary, items = evaluate_all_records(wb, mapped, leave_records, [])
+    assert summary['updates_count'] == 1
+    assert items[0]['status_type'] == 'update'
+    assert items[0]['cell_updates']['F2'] == 'ลาป่วย'
+    assert items[0]['cell_updates']['P2'] == 'ป'
+
+
 if __name__ == "__main__":
     test_checkout_time_rounding()
     test_fingerprint_scans()
@@ -395,4 +473,5 @@ if __name__ == "__main__":
     test_afternoon_shift_and_leave_anomaly_exclusion()
     test_afternoon_scan_with_morning_attendance_slip()
     test_double_check_actual_and_adjusted_times()
+    test_auto_detect_columns_and_buddhist_era_sheets()
     print("ALL TESTS PASSED SUCCESSFULLY! (100% OK)")

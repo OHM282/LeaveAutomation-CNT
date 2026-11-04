@@ -63,7 +63,7 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
 
 
@@ -552,38 +552,182 @@ def read_excel_safely(filepath):
         return pd.read_excel(filepath, header=None)
 
 
+def convert_year_to_ce(y):
+    """
+    แปลงปีเป็น ค.ศ. 4 หลัก รองรับทั้ง:
+    - ปี พ.ศ. 4 หลัก (เช่น 2569 -> 2026)
+    - ปี พ.ศ. 2 หลัก (เช่น 69 -> 2026, 70 -> 2027)
+    - ปี ค.ศ. 2 หลัก (เช่น 26 -> 2026, 27 -> 2027)
+    - ปี ค.ศ. 4 หลัก (เช่น 2026 -> 2026)
+    """
+    if y >= 2500:
+        return y - 543
+    if 40 <= y < 100:
+        return 2500 + y - 543
+    if y < 40:
+        return 2000 + y
+    return y
+
+
+def detect_daily_sheet_columns(ws, default_cfg=None):
+    """
+    ตรวจจับตำแหน่งคอลัมน์จากหัวตารางในชีทรายวันโดยอัตโนมัติ
+    รองรับทั้งโครงสร้างฟอร์มเดิม (A, B, E, G, J, K, L, M, Q)
+    และโครงสร้างฟอร์มใหม่ (A, B, E, F, I, J, K, L, P) รวมถึงฟอร์มอื่น ๆ ในอนาคต
+    """
+    cfg = dict(default_cfg or get_default_column_config())
+    if ws is None:
+        return cfg
+
+    detected = {}
+    left_col_idx = None
+
+    header_row = 1
+    r1_str = " ".join([str(ws.cell(1, c).value or '') for c in range(1, 10)]).lower()
+    if 'ac-no' not in r1_str and 'รหัส' not in r1_str and 'name' not in r1_str:
+        r2_str = " ".join([str(ws.cell(2, c).value or '') for c in range(1, 10)]).lower()
+        if 'ac-no' in r2_str or 'รหัส' in r2_str or 'name' in r2_str:
+            header_row = 2
+            cfg['start_row'] = 3
+
+    for c in range(1, min(ws.max_column + 1, 35)):
+        val = str(ws.cell(header_row, c).value or '').strip()
+        if not val or val.lower() == 'none':
+            continue
+        v_lower = val.lower()
+        col_letter = openpyxl.utils.get_column_letter(c)
+
+        if v_lower in ['ac-no', 'ac_no', 'ac no', 'รหัส', 'รหัสพนักงาน', 'no', 'id']:
+            detected['emp_id_col'] = col_letter
+        elif v_lower in ['name', 'ชื่อ', 'ชื่อ-สกุล', 'ชื่อ-นามสกุล', 'ชื่อพนักงาน']:
+            detected['emp_name_col'] = col_letter
+        elif v_lower in ['time', 'scan', 'เวลาสแกน'] and 'time-in' not in v_lower and 'time-out' not in v_lower:
+            detected['scan_col'] = col_letter
+        elif v_lower in ['time-in', 'time in', 'เวลาเข้าจริง']:
+            detected['time_in_col'] = col_letter
+        elif v_lower in ['time-out', 'time out', 'เวลาออกจริง']:
+            detected['time_out_col'] = col_letter
+        elif v_lower in ['check-in', 'check in', 'เข้างาน', 'เวลาเข้า']:
+            detected['checkin_col'] = col_letter
+        elif v_lower in ['check-out', 'check out', 'ออกงาน', 'เวลาออก']:
+            detected['checkout_col'] = col_letter
+        elif v_lower in ['total', 'รวม', 'ชม.รวม', 'ชั่วโมงรวม']:
+            detected['leave_code_col'] = col_letter
+        elif v_lower in ['leave', 'การลา', 'ประเภทการลา', 'หมายเหตุการลา']:
+            detected['leave_type_col'] = col_letter
+        elif v_lower == 'left':
+            left_col_idx = c
+
+    # กรณีไม่มีคอลัมน์ชื่อ 'leave' ให้ใช้คอลัมน์ที่อยู่ติดด้านซ้ายของ 'Left' (ช่องวันลาตามฟอร์ม CNT)
+    if 'leave_type_col' not in detected and left_col_idx is not None and left_col_idx > 1:
+        detected['leave_type_col'] = openpyxl.utils.get_column_letter(left_col_idx - 1)
+
+    cfg.update(detected)
+    return cfg
+
+
+def resolve_workbook_columns(wb_or_path, col_config=None):
+    """
+    ดึงคอนฟิกคอลัมน์ที่ตรงกับไฟล์จริง โดยค้นหาชีทรายวันแผ่นแรกแล้วอ่านหัวตาราง
+    """
+    cfg = dict(col_config or get_default_column_config())
+    close_needed = False
+    wb = None
+    if isinstance(wb_or_path, str):
+        if not wb_or_path or not os.path.exists(wb_or_path):
+            return cfg
+        try:
+            wb = openpyxl.load_workbook(wb_or_path, read_only=True, data_only=True)
+            close_needed = True
+        except Exception:
+            return cfg
+    elif isinstance(wb_or_path, openpyxl.Workbook):
+        wb = wb_or_path
+    else:
+        return cfg
+
+    try:
+        sheet_map = map_workbook_sheets(wb)
+        if sheet_map:
+            first_sname = next(iter(sheet_map.values()))
+            if first_sname in wb.sheetnames:
+                cfg = detect_daily_sheet_columns(wb[first_sname], default_cfg=cfg)
+        else:
+            ignored_keywords = ['ไม่มีแจ้งในระบบ', 'รายงาน', 'ชั่วโมง', 'summary', 'wk.', 'wk ', 'demo']
+            for sname in wb.sheetnames:
+                clean = sname.strip().lower()
+                if any(kw in clean for kw in ignored_keywords):
+                    continue
+                cfg = detect_daily_sheet_columns(wb[sname], default_cfg=cfg)
+                break
+    finally:
+        if close_needed and wb is not None:
+            wb.close()
+
+    return cfg
+
+
+def get_formula_pattern_for_col(ws, col_letter, start_row=2, max_rows=30):
+    """
+    ตรวจจับสูตรคำนวณมาตรฐานในคอลัมน์เป้าหมาย เพื่อใช้คืนค่าสูตรอย่างถูกต้อง (ไม่ทำให้เกิด Circular Reference)
+    เช่น ฟอร์มเดิม =+P{row}-1 หรือ ฟอร์มใหม่ =IF(O{row}=0, 0, O{row}-1)
+    """
+    if ws is not None:
+        for r in range(start_row, min(ws.max_row + 1, start_row + max_rows)):
+            val = str(ws[f"{col_letter}{r}"].value or '').strip()
+            if val.startswith('='):
+                pattern = re.sub(rf'(?<=[A-Za-z$]){r}\b', '{row}', val)
+                return pattern
+    if str(col_letter).upper() == 'P':
+        return '=IF(O{row}=0, 0, O{row}-1)'
+    return '=+P{row}-1'
+
+
 def map_workbook_sheets(wb):
     """
     สแกนหาชีทรายวันทั้งหมดในไฟล์ STAFF TIME แล้วจับคู่กับ datetime.date
+    รองรับทั้งปี ค.ศ. (เช่น 26, 2026) และปี พ.ศ. (เช่น 69, 2569)
+    และคัดกรองข้ามชีทที่ไม่ใช่ชีทบันทึกเวลารายวัน (เช่น 'ไม่มีแจ้งในระบบ', 'ชั่วโมง', 'WK.', 'DEMO')
     """
     sheet_date_map = {}
+    ignored_keywords = [
+        'ไม่มีแจ้งในระบบ', 'รายงาน', 'ชั่วโมง', 'summary', 'wk.', 'wk ', 'demo', 'setting', 'config'
+    ]
+
     for name in wb.sheetnames:
-        ws = wb[name]
         clean = name.strip()
-        
+        lower_name = clean.lower()
+        if any(kw in lower_name for kw in ignored_keywords):
+            continue
+
+        # 1. รูปแบบ DD.MM.YY หรือ DD.MM.YYYY
         m = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$", clean)
         if m:
-            d = int(m.group(1)); mo = int(m.group(2)); y = int(m.group(3))
-            if y < 100:
-                y += 2000
-            try:
-                sheet_date_map[date(y, mo, d)] = name
-                continue
-            except ValueError:
-                pass
-                
-        m2 = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$", clean)
-        if m2:
-            d = int(m2.group(1)); mo = int(m2.group(2)); y = int(m2.group(3))
-            if y < 100:
-                y += 2000
+            d = int(m.group(1)); mo = int(m.group(2)); y_raw = int(m.group(3))
+            y = convert_year_to_ce(y_raw)
             try:
                 sheet_date_map[date(y, mo, d)] = name
                 continue
             except ValueError:
                 pass
 
-        # ตรวจสอบเนื้อหาในเซลล์หัวตาราง
+        # 2. รูปแบบ DD-MM-YY หรือ DD/MM/YY
+        m2 = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$", clean)
+        if m2:
+            d = int(m2.group(1)); mo = int(m2.group(2)); y_raw = int(m2.group(3))
+            y = convert_year_to_ce(y_raw)
+            try:
+                sheet_date_map[date(y, mo, d)] = name
+                continue
+            except ValueError:
+                pass
+
+        # 3. ตรวจสอบเนื้อหาในเซลล์หัวตารางเฉพาะชีทที่มีฟอร์มพนักงาน
+        ws = wb[name]
+        r1_text = " ".join([str(ws.cell(1, c).value or '') for c in range(1, 10)])
+        if not any(k in r1_text.lower() for k in ['ac-no', 'name', 'check-in', 'time']):
+            continue
+
         found_cell_date = None
         for cell_coord in ["D2", "D3", "E2", "C2", "B2"]:
             cval = ws[cell_coord].value
@@ -598,9 +742,7 @@ def map_workbook_sheets(wb):
             else:
                 m_str = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})", str(cval))
                 if m_str:
-                    cd = int(m_str.group(1)); cmo = int(m_str.group(2)); cy = int(m_str.group(3))
-                    if cy < 100:
-                        cy += 2000
+                    cd = int(m_str.group(1)); cmo = int(m_str.group(2)); cy = convert_year_to_ce(int(m_str.group(3)))
                     try:
                         found_cell_date = date(cy, cmo, cd)
                         break
@@ -700,11 +842,11 @@ COMPANY_HOLIDAYS_2026 = {
 }
 
 
-def is_company_holiday(target_date, ws=None):
+def is_company_holiday(target_date, ws=None, leave_code_col=None):
     """
     ตรวจสอบว่าเป็นวันหยุดบริษัทหรือไม่:
     1. ตรวจสอบตามปฏิทินวันหยุดประจำปี 2569 (2026) ของ บมจ.คริสเตียนีและนีลเส็น (ไทย)
-    2. ตรวจสอบจากในชีทว่ามีการกรอก 'น' ในช่อง Q เป็นจำนวนมาก (>= 3 แถว) หรือไม่
+    2. ตรวจสอบจากในชีทว่ามีการกรอก 'น' ในช่องสถานะวันลา (Q หรือ P) เป็นจำนวนมาก (>= 3 แถว) หรือไม่
     """
     if isinstance(target_date, datetime):
         target_date = target_date.date()
@@ -734,16 +876,20 @@ def is_company_holiday(target_date, ws=None):
     if md in month_day_holidays:
         return True, month_day_holidays[md]
 
-    # ตรวจสอบจากข้อมูลในชีท หากมีตัวย่อ 'น' ในช่อง Q ตั้งแต่ 3 แถวขึ้นไป
+    # ตรวจสอบจากข้อมูลในชีท หากมีตัวย่อ 'น' ในช่องสถานะวันลา ตั้งแต่ 3 แถวขึ้นไป
     if ws is not None:
-        count_nor = 0
-        max_check = min(ws.max_row, 30)
-        for r in range(2, max_check + 1):
-            val_q = str(ws[f"Q{r}"].value or '').strip()
-            if val_q == 'น':
-                count_nor += 1
-                if count_nor >= 3:
-                    return True, "วันหยุดบริษัท (ตรวจพบ 'น' ในชีท)"
+        check_cols = [leave_code_col] if leave_code_col else ['Q', 'P']
+        for c_col in check_cols:
+            if not c_col:
+                continue
+            count_nor = 0
+            max_check = min(ws.max_row, 30)
+            for r in range(2, max_check + 1):
+                val_q = str(ws[f"{c_col}{r}"].value or '').strip()
+                if val_q == 'น':
+                    count_nor += 1
+                    if count_nor >= 3:
+                        return True, "วันหยุดบริษัท (ตรวจพบ 'น' ในชีท)"
 
     return False, None
 
@@ -1021,7 +1167,7 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
     ฟังก์ชันแกนกลางตัวเดียวที่ตัดสินใจตรวจสอบ Safeguard, ตรวจชื่อ-รหัส, ตรวจความขัดแย้ง
     และคำนวณเซลล์ที่จะแก้ไข คืนค่า (summary, evaluated_items) ใช้ร่วมกันทั้ง Preview และ Run จริง
     """
-    cfg = col_config or get_default_column_config()
+    cfg = resolve_workbook_columns(wb, col_config)
     emp_id_col = cfg.get('emp_id_col', 'A').upper().strip() or 'A'
     emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
     scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
@@ -1146,7 +1292,7 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
         # กฎ: ในกรณีที่เป็นวันหยุดบริษัท จะไม่เอาเงื่อนไขการลาใดๆ ไปกรอกลงช่อง G เลย
         # - คนที่ไม่มีสแกน: บังคับกรอก 'น' ในช่อง Q และช่อง G ต้องว่างเปล่า (ล้างค่าวันลาออก)
         # - คนที่มีสแกน: ปล่อยตามสูตรคำนวณของ Excel (ไม่กรอก 'น' และไม่ลงวันลาในช่อง G)
-        is_holiday, holiday_name = is_company_holiday(rec['date'], ws)
+        is_holiday, holiday_name = is_company_holiday(rec['date'], ws, leave_code_col=leave_code_col)
         if is_holiday:
             if h_in or h_out:
                 # มีสแกนทำงาน: ปล่อยตามสูตรคำนวณ ไม่ลงวันลาใดๆ
@@ -1160,8 +1306,10 @@ def evaluate_all_records(wb, sheet_date_map, leave_records, attendance_records, 
                     target_cells_list.append(f"{leave_type_col}{row}")
 
                 if cell_q_val and not cell_q_val.startswith("=") and cell_q_val in ['พ', 'ป', 'อ', 'น']:
-                    cell_updates[f"{leave_code_col}{row}"] = f"=+P{row}-1"
-                    mod_actions.append(f"คืนค่าสูตรคำนวณช่อง {leave_code_col}{row} ➔ '=+P{row}-1'")
+                    formula_pat = get_formula_pattern_for_col(ws, leave_code_col, start_row)
+                    restored_f = formula_pat.format(row=row)
+                    cell_updates[f"{leave_code_col}{row}"] = restored_f
+                    mod_actions.append(f"คืนค่าสูตรคำนวณช่อง {leave_code_col}{row} ➔ '{restored_f}'")
                     target_cells_list.append(f"{leave_code_col}{row}")
 
                 if not cell_updates:
@@ -1487,7 +1635,7 @@ def simulate_all_changes(main_filepath, approval_filepath=None, attendance_filep
     log_callback = log_callback or (lambda msg: None)
     progress_callback = progress_callback or (lambda p: None)
 
-    cfg = col_config or get_default_column_config()
+    cfg = resolve_workbook_columns(main_filepath, col_config)
     progress_callback(10)
     log_callback("เริ่มต้นจำลองการประมวลผล (Pre-Check Preview)...")
 
@@ -1552,7 +1700,7 @@ def get_employee_details(emp_query, main_filepath, approval_filepath=None, atten
     ค้นหาข้อมูลรายบุคคลสำหรับหน้าจอ Employee Quick Inspector:
     ดึงข้อมูลประวัติในชีท STAFF TIME ทุกวัน, รายการลาที่ได้รับอนุมัติ, และใบแจ้งเวลา
     """
-    cfg = col_config or get_default_column_config()
+    cfg = resolve_workbook_columns(main_filepath, col_config)
     emp_id_col = cfg.get('emp_id_col', 'A').upper().strip() or 'A'
     emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
     scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
@@ -1706,7 +1854,7 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
     """
     log_callback = log_callback or print
     progress_callback = progress_callback or (lambda p: None)
-    cfg = col_config or get_default_column_config()
+    cfg = resolve_workbook_columns(main_filepath, col_config)
 
     progress_callback(5)
     log_callback("=" * 72)
@@ -1779,9 +1927,10 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
     leave_code_col = cfg.get('leave_code_col', 'Q').upper().strip() or 'Q'
     scan_col = cfg.get('scan_col', 'E').upper().strip() or 'E'
     start_row = int(cfg.get('start_row', 2))
+    emp_name_col = cfg.get('emp_name_col', 'B').upper().strip() or 'B'
     for dt, sheet_name in sheet_date_map.items():
         ws = wb[sheet_name]
-        is_holiday, holiday_name = is_company_holiday(dt, ws)
+        is_holiday, holiday_name = is_company_holiday(dt, ws, leave_code_col=leave_code_col)
         for r in range(start_row, ws.max_row + 1):
             for col_letter in [checkin_col, checkout_col]:
                 c = ws[f"{col_letter}{r}"]
@@ -1791,16 +1940,16 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
                         set_cell_time(c, time(int(m.group(1)), int(m.group(2))))
                 elif isinstance(c.value, (datetime, time)):
                     c.number_format = 'h:mm'
-            # คืนค่าสูตรคำนวณในช่อง Q หากเคยมีตัวย่อติดไปกับสูตร
+            # คืนค่าสูตรคำนวณในช่องสถานะวันลา หากเคยมีตัวย่อติดไปกับสูตร
             q_cell = ws[f"{leave_code_col}{r}"]
             q_val = str(q_cell.value or '').strip()
-            if q_val.startswith('=+P') and '/' in q_val:
+            if q_val.startswith('=') and '/' in q_val:
                 q_cell.value = re.sub(r'/[ก-๙A-Za-z]+$', '', q_val)
 
             # ตรวจสอบวันหยุดบริษัทสำหรับทุกแถว:
-            # - คนไม่มีสแกน บังคับ Q เป็น 'น' และช่อง G ต้องว่าง
-            # - คนมีสแกน ปล่อยตามสูตร (ห้ามเป็น 'น') และช่อง G ว่าง
-            if is_holiday and ws[f"B{r}"].value:
+            # - คนไม่มีสแกน บังคับ leave_code_col เป็น 'น' และช่อง leave_type_col ต้องว่าง
+            # - คนมีสแกน ปล่อยตามสูตร (ห้ามเป็น 'น') และช่อง leave_type_col ว่าง
+            if is_holiday and ws[f"{emp_name_col}{r}"].value:
                 scan_val = ws[f"{scan_col}{r}"].value
                 h_in, h_out, _, _, _ = check_fingerprint_scans(scan_val)
                 g_cell = ws[f"{leave_type_col}{r}"]
@@ -1812,7 +1961,8 @@ def process_all_files(main_filepath, approval_filepath=None, attendance_filepath
                         g_cell.value = None
                 else:
                     if q_val == 'น':
-                        q_cell.value = f"=+P{r}-1"
+                        formula_pat = get_formula_pattern_for_col(ws, leave_code_col, start_row)
+                        q_cell.value = formula_pat.format(row=r)
                     if g_val and g_val != 'None':
                         g_cell.value = None
 
@@ -2902,7 +3052,6 @@ def analyze_attendance_anomalies(main_source, col_config=None):
     รองรับทั้ง main_source เป็น filepath (str) หรือ openpyxl.Workbook
     จัดกลุ่มตามชื่อพนักงาน และเรียงตามลำดับวันที่โดยอัตโนมัติ (หาก 1 คนมีหลายวัน จะเรียงติดกัน)
     """
-    cfg = col_config or get_default_column_config()
     if isinstance(main_source, str):
         if not main_source or not os.path.exists(main_source):
             return {'success': False, 'error': 'ไม่พบไฟล์รายงาน STAFF TIME'}
@@ -2914,6 +3063,8 @@ def analyze_attendance_anomalies(main_source, col_config=None):
         wb = main_source
     else:
         return {'success': False, 'error': 'ข้อมูลไฟล์ไม่ถูกต้อง'}
+
+    cfg = resolve_workbook_columns(wb, col_config)
 
     sheets = map_workbook_sheets(wb)
     if not sheets:
@@ -5322,6 +5473,7 @@ class ModernCustomTkinterApp:
         main_f = settings.get("main_file", "")
         if main_f and os.path.exists(main_f):
             self.txt_main.insert(0, main_f)
+            self._auto_detect_columns_from_file(main_f)
 
         appr_f = settings.get("appr_file", "")
         if appr_f and os.path.exists(appr_f):
@@ -5435,6 +5587,7 @@ class ModernCustomTkinterApp:
             else:
                 self.txt_main.delete(0, 'end')
                 self.txt_main.insert(0, p)
+                self._auto_detect_columns_from_file(p)
                 self.save_current_settings()
                 self._flash_card(self.card_main)
                 self.log(f"ลากและวางไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
@@ -5455,6 +5608,7 @@ class ModernCustomTkinterApp:
                 elif not assigned_main:
                     self.txt_main.delete(0, 'end')
                     self.txt_main.insert(0, p)
+                    self._auto_detect_columns_from_file(p)
                     assigned_main = True
                     self.log(f"ระบุไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
             self.save_current_settings()
@@ -5618,7 +5772,30 @@ class ModernCustomTkinterApp:
             )
             self.cols_expanded = True
 
+    def _auto_detect_columns_from_file(self, filepath):
+        if not filepath or not os.path.exists(filepath):
+            return
+        try:
+            detected = resolve_workbook_columns(filepath)
+            self.entry_col_emp.delete(0, 'end'); self.entry_col_emp.insert(0, detected.get('emp_id_col', 'A'))
+            self.entry_col_name.delete(0, 'end'); self.entry_col_name.insert(0, detected.get('emp_name_col', 'B'))
+            self.entry_col_scan.delete(0, 'end'); self.entry_col_scan.insert(0, detected.get('scan_col', 'E'))
+            self.entry_col_leave.delete(0, 'end'); self.entry_col_leave.insert(0, detected.get('leave_type_col', 'G'))
+            self.entry_col_in.delete(0, 'end'); self.entry_col_in.insert(0, detected.get('checkin_col', 'L'))
+            self.entry_col_out.delete(0, 'end'); self.entry_col_out.insert(0, detected.get('checkout_col', 'M'))
+            self.entry_col_code.delete(0, 'end'); self.entry_col_code.insert(0, detected.get('leave_code_col', 'Q'))
+            self.entry_start_row.delete(0, 'end'); self.entry_start_row.insert(0, str(detected.get('start_row', 2)))
+            self.save_current_settings()
+            self.log(f"🔍 ตรวจพบฟอร์มตารางอัตโนมัติ: วันลา={detected['leave_type_col']}, เข้า={detected['checkin_col']}, ออก={detected['checkout_col']}, สถานะ={detected['leave_code_col']}")
+        except Exception:
+            pass
+
     def reset_column_defaults(self):
+        main_f = self.txt_main.get().strip()
+        if main_f and os.path.exists(main_f):
+            self._auto_detect_columns_from_file(main_f)
+            self.show_toast("ตรวจจับตำแหน่งคอลัมน์จากไฟล์จริงเรียบร้อย", "info")
+            return
         defaults = get_default_column_config()
         self.entry_col_emp.delete(0, 'end'); self.entry_col_emp.insert(0, defaults['emp_id_col'])
         self.entry_col_name.delete(0, 'end'); self.entry_col_name.insert(0, defaults['emp_name_col'])
@@ -5675,6 +5852,7 @@ class ModernCustomTkinterApp:
         if filename:
             self.txt_main.delete(0, "end")
             self.txt_main.insert(0, filename)
+            self._auto_detect_columns_from_file(filename)
             self.save_current_settings()
             self.log(f"เลือกไฟล์ STAFF TIME: {os.path.basename(filename)}")
 
