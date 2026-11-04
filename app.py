@@ -63,8 +63,9 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
+DEFAULT_UI_FONT = "Segoe UI"
 
 
 # -------------------------------------------------------------
@@ -2028,7 +2029,7 @@ class ManualDialog(ctk.CTkToplevel):
         self.title("คู่มือการใช้งานระบบ CNT STAFF TIME AUTOMATION - BY WERAWAT THAMRONGDULLAPARK")
         center_window(self, 1080, 800, parent)
         self.minsize(960, 680)
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
 
         if icon_path and os.path.exists(icon_path):
             try:
@@ -2290,7 +2291,7 @@ class PreviewDialog(ctk.CTkToplevel):
         self.filtered_items = preview_items
         self.on_proceed_callback = on_proceed_callback
         self.current_filter = "all"
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
 
         # ตัวแปรแบ่งหน้าเพื่อความลื่นไหล (โหลดทันที ไม่กระตุก)
         self.display_limit = 25
@@ -2639,7 +2640,7 @@ class InspectorDialog(ctk.CTkToplevel):
         self.appr_file = appr_file
         self.att_file = att_file
         self.col_config = col_config
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
 
         self.title("ระบบตรวจสอบข้อมูลรายบุคคล (Employee Quick Inspector)")
         center_window(self, 1000, 740, parent)
@@ -2903,7 +2904,7 @@ class AnalyticsDialog(ctk.CTkToplevel):
         self.appr_file = appr_file
         self.att_file = att_file
         self.col_config = col_config
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
 
         self.title("สถิติภาพรวมเวลาทำงานและวันลา (STAFF TIME Analytics)")
         center_window(self, 960, 720, parent)
@@ -3416,7 +3417,7 @@ class AnomalyDialog(ctk.CTkToplevel):
         self.parent = parent
         self.main_file = main_file
         self.col_config = col_config
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
 
         self.title("ระบบวิเคราะห์เวลาทำงานและสแกนผิดปกติอัจฉริยะ (Smart Attendance Anomaly Analyzer)")
         center_window(self, 1020, 740, parent)
@@ -3939,7 +3940,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.github_repo = github_repo
         self.icon_path = icon_path
         self.on_repo_save = on_repo_save
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
 
         self.release_data = None
         self.is_downloading = False
@@ -4395,7 +4396,7 @@ echo ========================================================
 echo    กำลังดำเนินการอัปเดต LeaveAutomation_1856 เป็นเวอร์ชันใหม่...
 echo    กรุณารอสักครู่ ห้ามปิดหน้าต่างนี้
 echo ========================================================
-timeout /t 2 /nobreak >nul
+timeout /t 3 /nobreak >nul
 :retry
 del "{current_exe}" 2>nul
 if exist "{current_exe}" (
@@ -4415,7 +4416,7 @@ set PYI_PARENT_PID=
 set PYTHONPATH=
 set PYTHONHOME=
 timeout /t 1 /nobreak >nul
-start "" "{current_exe}"
+start "" /D "{exe_dir}" "{current_exe}"
 del "%~f0"
 """
                 with open(bat_path, "w", encoding="utf-8") as f:
@@ -4480,7 +4481,7 @@ class ModernCustomTkinterApp:
         self.root.geometry("1220x890")
         self.root.minsize(960, 640)
         
-        self.font_family = "Tahoma"
+        self.font_family = DEFAULT_UI_FONT
         self.font_scale_var = ctk.StringVar(value="100%")
         self.font_scale = 1.0
 
@@ -4628,22 +4629,22 @@ class ModernCustomTkinterApp:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
         
-        # สีธีม Enterprise 2026 (Modern Slate Navy + High Contrast)
-        self.color_navy = "#0f172a"          # Header Navy (Slate 900)
-        self.color_primary = "#1d4ed8"       # CNT Corporate Blue (Blue 700)
-        self.color_primary_hover = "#1e40af"
+        # สีธีม Apple HIG + Enterprise 2026 (Clean Modern Apple Slate & System Blue)
+        self.color_navy = "#18181b"          # Header Dark Slate (Apple Pro aesthetic)
+        self.color_primary = "#0071e3"       # Apple San Francisco Blue
+        self.color_primary_hover = "#0077ed"
         self.color_accent = "#0284c7"        # Sky Blue for preview & secondary
         self.color_accent_hover = "#0369a1"
-        self.color_emerald = "#059669"       # Emerald Green for Main Execution CTA
-        self.color_emerald_hover = "#047857"
-        self.color_pineapple = "#059669"     # Backward compatibility
-        self.color_coconut = "#059669"       # Backward compatibility
+        self.color_emerald = "#10b981"       # Apple Mint / Emerald for Main Execution CTA
+        self.color_emerald_hover = "#059669"
+        self.color_pineapple = "#10b981"     # Backward compatibility
+        self.color_coconut = "#10b981"       # Backward compatibility
         self.color_card_bg = "#ffffff"
-        self.color_canvas = "#f1f5f9"        # Soft Slate 100
-        self.color_border = "#cbd5e1"        # Slate 300
-        self.color_border_subtle = "#e2e8f0" # Slate 200
-        self.color_text_dark = "#0f172a"     # Slate 900 (High contrast)
-        self.color_text_muted = "#475569"    # Slate 600
+        self.color_canvas = "#f5f5f7"        # Apple System Gray 6 (Smooth Clean Canvas)
+        self.color_border = "#e5e5ea"        # Apple System Gray 4 (Subtle 1px border)
+        self.color_border_subtle = "#f2f2f7" # Apple System Gray 5
+        self.color_text_dark = "#1d1d1f"     # Apple Primary Label Text
+        self.color_text_muted = "#6e6e73"    # Apple Secondary Label Text
 
         # -------------------------------------------------------------
         # 1. แถบหัวเรื่องพรีเมียม (2026 Enterprise Responsive Header)
