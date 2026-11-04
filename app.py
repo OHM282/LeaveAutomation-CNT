@@ -63,7 +63,7 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.7"
+APP_VERSION = "1.2.8"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
 DEFAULT_UI_FONT = "Tahoma"
 
@@ -125,6 +125,42 @@ def center_window(window, width, height, parent=None):
     x = max(20, x)
     y = max(20, y)
     window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+def apply_windows_titlebar_theme(window, hex_color="#0f172a"):
+    """ปรับแต่งสี Title Bar ของ Windows 11 ให้เป็นสีตามธีม Deep Navy ด้วย Windows DWM API"""
+    try:
+        import ctypes
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetAncestor(window.winfo_id(), 2)
+        if not hwnd:
+            hwnd = window.winfo_id()
+        # DWMWA_CAPTION_COLOR = 35 (Windows 11 Build 22000+)
+        # DWMWA_TEXT_COLOR = 36
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        color_bgr = (b << 16) | (g << 8) | r
+        c_color = ctypes.c_int(color_bgr)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(c_color), ctypes.sizeof(c_color))
+        c_text = ctypes.c_int(0x00FFFFFF)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(c_text), ctypes.sizeof(c_text))
+    except Exception:
+        pass
+
+
+def format_file_size(size_bytes):
+    """แปลงขนาดไฟล์เป็นหน่วยที่มนุษย์อ่านง่าย (B, KB, MB)"""
+    try:
+        size_bytes = float(size_bytes)
+        if size_bytes < 1024:
+            return f"{int(size_bytes)} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        else:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+    except Exception:
+        return ""
 
 
 # -------------------------------------------------------------
@@ -2124,6 +2160,7 @@ class ManualDialog(ctk.CTkToplevel):
                 pass
 
         self.setup_ui()
+        apply_windows_titlebar_theme(self, "#0f172a")
         self.lift()
         self.attributes("-topmost", True)
         self.after_idle(lambda: self.attributes("-topmost", False))
@@ -2394,6 +2431,7 @@ class PreviewDialog(ctk.CTkToplevel):
                 pass
 
         self.setup_ui()
+        apply_windows_titlebar_theme(self, "#0f172a")
         self.lift()
         self.attributes("-topmost", True)
         self.after_idle(lambda: self.attributes("-topmost", False))
@@ -2739,6 +2777,7 @@ class InspectorDialog(ctk.CTkToplevel):
                 pass
 
         self.setup_ui()
+        apply_windows_titlebar_theme(self, "#0f172a")
         self.lift()
         self.attributes("-topmost", True)
         self.after_idle(lambda: self.attributes("-topmost", False))
@@ -3003,6 +3042,7 @@ class AnalyticsDialog(ctk.CTkToplevel):
                 pass
 
         self.setup_ui()
+        apply_windows_titlebar_theme(self, "#0f172a")
         self.lift()
         self.attributes("-topmost", True)
         self.after_idle(lambda: self.attributes("-topmost", False))
@@ -3520,6 +3560,7 @@ class AnomalyDialog(ctk.CTkToplevel):
         self.anomalies_data = []
 
         self.setup_ui()
+        apply_windows_titlebar_theme(self, "#0f172a")
         self.load_data()
 
         self.grab_set()
@@ -4043,6 +4084,7 @@ class UpdateDialog(ctk.CTkToplevel):
                 pass
 
         self.setup_ui()
+        apply_windows_titlebar_theme(self, "#0f172a")
         self.lift()
         self.attributes("-topmost", True)
         self.after_idle(lambda: self.attributes("-topmost", False))
@@ -4572,11 +4614,11 @@ class ModernCustomTkinterApp:
         self.font_scale = 1.0
 
         # ตัวแปรฟอนต์มาตรฐานสำหรับระบบ Senior-Friendly Dynamic Font Scaler (UI/UX Pro Max)
-        self.font_title = ctk.CTkFont(family=self.font_family, size=20, weight="bold")
-        self.font_h2 = ctk.CTkFont(family=self.font_family, size=14, weight="bold")
-        self.font_body = ctk.CTkFont(family=self.font_family, size=13)
-        self.font_btn = ctk.CTkFont(family=self.font_family, size=13, weight="bold")
-        self.font_sm = ctk.CTkFont(family=self.font_family, size=11, weight="bold")
+        self.font_title = ctk.CTkFont(family=self.font_family, size=24, weight="bold")
+        self.font_h2 = ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+        self.font_body = ctk.CTkFont(family=self.font_family, size=14)
+        self.font_btn = ctk.CTkFont(family=self.font_family, size=14, weight="bold")
+        self.font_sm = ctk.CTkFont(family=self.font_family, size=13, weight="bold")
         self.font_cta = ctk.CTkFont(family=self.font_family, size=18, weight="bold")
 
         self.current_toast = None
@@ -4610,6 +4652,7 @@ class ModernCustomTkinterApp:
                 
         self.github_repo = DEFAULT_GITHUB_REPO
         self.setup_ui()
+        apply_windows_titlebar_theme(self.root, self.color_navy)
         self.load_saved_settings()
 
         # บันทึกการตั้งค่าอัตโนมัติเมื่อปิดโปรแกรม
@@ -4638,11 +4681,11 @@ class ModernCustomTkinterApp:
     def _apply_font_scale(self, scale):
         """คำนวณและอัปเดตขนาดตัวอักษรทุกตัวแปรฟอนต์แบบเรียลไทม์ (Senior-Friendly)"""
         self.font_scale = scale
-        self.font_title.configure(size=int(20 * scale))
-        self.font_h2.configure(size=int(14 * scale))
-        self.font_body.configure(size=int(13 * scale))
-        self.font_btn.configure(size=int(13 * scale))
-        self.font_sm.configure(size=int(11 * scale))
+        self.font_title.configure(size=int(24 * scale))
+        self.font_h2.configure(size=int(16 * scale))
+        self.font_body.configure(size=int(14 * scale))
+        self.font_btn.configure(size=int(14 * scale))
+        self.font_sm.configure(size=int(13 * scale))
         self.font_cta.configure(size=int(18 * scale))
 
     def show_toast(self, message, toast_type="info", duration_ms=2500):
@@ -4713,9 +4756,12 @@ class ModernCustomTkinterApp:
 
     def setup_ui(self):
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_rowconfigure(0, weight=0)
+        self.root.grid_rowconfigure(1, weight=0)
+        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_rowconfigure(3, weight=0)
         
-        # สีธีม Apple Liquid Glass + Modern Enterprise 2026
+        # สีธีม Apple Liquid Glass + Modern Enterprise 2026 (macOS Tahoe Palette)
         self.color_navy = "#0f172a"          # macOS Dark Slate Navigation Header
         self.color_primary = "#0071e3"       # Apple System Blue
         self.color_primary_hover = "#0077ed"
@@ -4726,14 +4772,14 @@ class ModernCustomTkinterApp:
         self.color_pineapple = "#059669"     # Backward compatibility
         self.color_coconut = "#059669"       # Backward compatibility
         self.color_card_bg = "#ffffff"       # Frosted Glass Card Surface (Crisp White)
-        self.color_canvas = "#f8fafc"        # Apple System Canvas (Soft Slate 50)
-        self.color_border = "#e2e8f0"        # Apple Subtle Glass Border (Slate 200)
-        self.color_border_subtle = "#f1f5f9" # Slate 100
+        self.color_canvas = "#f1f5f9"        # Apple System Canvas (Soft Slate 100 with Tahoe ambience)
+        self.color_border = "#dbeafe"        # Apple Translucent Soft Blue Glass Border
+        self.color_border_subtle = "#e2e8f0" # Slate 200
         self.color_text_dark = "#0f172a"     # Apple Primary Label (Slate 900, High Contrast)
         self.color_text_muted = "#475569"    # Apple Secondary Label (Slate 600)
 
         # -------------------------------------------------------------
-        # 1. แถบหัวเรื่องพรีเมียม (2026 Enterprise Responsive Header)
+        # 1. แถบหัวเรื่องพรีเมียม (macOS Dark Slate Navigation Header)
         # -------------------------------------------------------------
         header_frame = ctk.CTkFrame(
             self.root, 
@@ -4800,7 +4846,7 @@ class ModernCustomTkinterApp:
         )
         self.btn_update.pack(side="left", padx=(0, 8))
 
-        # สเกลเลอร์ปรับขนาดตัวอักษรสำหรับผู้สูงวัย / สบายตา (Senior-Friendly Accessibility Scaler - UI/UX Pro Max)
+        # สเกลเลอร์ปรับขนาดตัวอักษรสำหรับผู้สูงวัย / สบายตา
         self.seg_font = ctk.CTkSegmentedButton(
             utility_box,
             values=["100%", "115%", "125%"],
@@ -4818,7 +4864,7 @@ class ModernCustomTkinterApp:
         )
         self.seg_font.pack(side="left")
 
-        # แถว 2: ชื่อโปรแกรมหลักเต็มความกว้าง (ไม่มีปุ่มมาเบียด ไม่ตกขอบ 100%)
+        # แถว 2: ชื่อโปรแกรมหลักเต็มความกว้าง
         header_title_bar = ctk.CTkFrame(header_frame, fg_color="transparent")
         header_title_bar.pack(fill="x", padx=20, pady=(2, 4))
 
@@ -4838,69 +4884,70 @@ class ModernCustomTkinterApp:
         )
         lbl_subtitle.pack(anchor="w", pady=(1, 0))
 
-        # แถว 3: แถบเมนูเครื่องมือ 4 ระบบงาน (Navigation Ribbon - จัดวางอิสระ ไม่ล้นขอบ 100%)
+        # แถว 3: แถบเมนูเครื่องมือ 4 ระบบงาน (macOS Segmented Navigation Ribbon)
         toolbar_box = ctk.CTkFrame(header_frame, fg_color="transparent")
-        toolbar_box.pack(fill="x", padx=20, pady=(2, 10))
+        toolbar_box.pack(fill="x", padx=20, pady=(4, 10))
+
+        nav_segmented_box = ctk.CTkFrame(
+            toolbar_box,
+            fg_color="#1e293b",
+            corner_radius=8,
+            border_width=1,
+            border_color="#334155"
+        )
+        nav_segmented_box.pack(side="left")
 
         btn_manual = ctk.CTkButton(
-            toolbar_box,
-            text="คู่มือการใช้งาน",
+            nav_segmented_box,
+            text="📖 คู่มือการใช้งาน",
             font=self.font_btn,
-            fg_color="#1e293b",
+            fg_color="transparent",
             hover_color="#334155",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#475569",
+            text_color="#f8fafc",
             height=34,
             corner_radius=6,
             command=self.open_manual
         )
-        btn_manual.pack(side="left", padx=(0, 6))
+        btn_manual.pack(side="left", padx=2, pady=2)
 
         btn_analytics = ctk.CTkButton(
-            toolbar_box,
-            text="สถิติภาพรวม",
+            nav_segmented_box,
+            text="📊 สถิติภาพรวม",
             font=self.font_btn,
-            fg_color="#1e293b",
+            fg_color="transparent",
             hover_color="#334155",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#475569",
+            text_color="#f8fafc",
             height=34,
             corner_radius=6,
             command=self.open_analytics
         )
-        btn_analytics.pack(side="left", padx=(0, 6))
+        btn_analytics.pack(side="left", padx=2, pady=2)
 
         btn_anomaly = ctk.CTkButton(
-            toolbar_box,
-            text="วิเคราะห์เวลาผิดปกติ",
+            nav_segmented_box,
+            text="⚠️ วิเคราะห์เวลาผิดปกติ",
             font=self.font_btn,
-            fg_color="#b45309",
-            hover_color="#92400e",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#d97706",
+            fg_color="transparent",
+            hover_color="#b45309",
+            text_color="#fef08a",
             height=34,
             corner_radius=6,
             command=self.open_anomaly_dialog
         )
-        btn_anomaly.pack(side="left", padx=(0, 6))
+        btn_anomaly.pack(side="left", padx=2, pady=2)
 
         btn_inspector = ctk.CTkButton(
-            toolbar_box,
-            text="ตรวจสอบรายคน",
+            nav_segmented_box,
+            text="👤 ตรวจสอบรายคน",
             font=self.font_btn,
-            fg_color="#1e293b",
+            fg_color="transparent",
             hover_color="#334155",
-            text_color="#ffffff",
-            border_width=1,
-            border_color="#475569",
+            text_color="#f8fafc",
             height=34,
             corner_radius=6,
             command=self.open_inspector
         )
-        btn_inspector.pack(side="left", padx=(0, 6))
+        btn_inspector.pack(side="left", padx=2, pady=2)
 
         # ผูก Tooltip บน Toolbar และ Utility
         add_tooltip(btn_manual, "เปิดคู่มือการใช้งานระบบ บันทึกเวลาและการประมวลผลการลาอย่างละเอียด")
@@ -4911,17 +4958,77 @@ class ModernCustomTkinterApp:
         add_tooltip(self.seg_font, "ปรับขนาดตัวอักษรทั้งโปรแกรม (100% ปกติ | 115% กลาง | 125% ใหญ่พิเศษเพื่อความสบายตา)")
 
         # -------------------------------------------------------------
-        # 2. พื้นที่เนื้อหาหลัก (Scrollable Card Container)
+        # 2. แถบขั้นตอนการทำงานอัจฉริยะ (Interactive Workflow Stepper - macOS Tahoe)
+        # -------------------------------------------------------------
+        self.stepper_frame = ctk.CTkFrame(
+            self.root,
+            corner_radius=0,
+            fg_color="#ffffff",
+            border_width=1,
+            border_color="#e2e8f0",
+            height=44
+        )
+        self.stepper_frame.grid(row=1, column=0, sticky="ew")
+        for st_col in range(6):
+            self.stepper_frame.grid_columnconfigure(st_col, weight=1)
+
+        self.step_cards = {}
+        self.step_labels = {}
+        self.step_sublabels = {}
+
+        steps_def = [
+            (1, "1. แฟ้มหลัก", "STAFF TIME"),
+            (2, "2. นำเข้าข้อมูล", "วันลา / ใบแจ้ง"),
+            (3, "3. ตำแหน่งคอลัมน์", "คอลัมน์เป้าหมาย"),
+            (4, "4. โหมดบันทึก", "สร้างใหม่ / ทับเดิม"),
+            (5, "5. Pre-Check", "พรีวิวตรวจสอบ"),
+            (6, "6. ประมวลผล", "บันทึกเวลาทำงาน")
+        ]
+
+        for num, title, subtitle in steps_def:
+            card = ctk.CTkFrame(
+                self.stepper_frame,
+                fg_color="#f8fafc",
+                corner_radius=8,
+                border_width=1,
+                border_color="#e2e8f0",
+                height=34
+            )
+            card.grid(row=0, column=num - 1, padx=4, pady=5, sticky="ew")
+            card.grid_columnconfigure(1, weight=1)
+
+            lbl_t = ctk.CTkLabel(
+                card,
+                text=title,
+                font=self.font_sm,
+                text_color=self.color_text_dark
+            )
+            lbl_t.grid(row=0, column=0, padx=(8, 4), pady=2, sticky="w")
+
+            lbl_sub = ctk.CTkLabel(
+                card,
+                text="○ รอระบุ",
+                font=ctk.CTkFont(family=self.font_family, size=11),
+                text_color="#94a3b8"
+            )
+            lbl_sub.grid(row=0, column=1, padx=(0, 8), pady=2, sticky="e")
+
+            self.step_cards[num] = card
+            self.step_labels[num] = lbl_t
+            self.step_sublabels[num] = lbl_sub
+
+        # -------------------------------------------------------------
+        # 3. พื้นที่เนื้อหาหลัก (Scrollable Card Container)
         # -------------------------------------------------------------
         main_scroll = ctk.CTkScrollableFrame(
             self.root,
             corner_radius=0,
             fg_color=self.color_canvas
         )
-        main_scroll.grid(row=1, column=0, sticky="nsew", padx=16, pady=12)
+        main_scroll.grid(row=2, column=0, sticky="nsew", padx=16, pady=12)
         main_scroll.grid_columnconfigure(0, weight=1)
 
-        # CARD 1: ไฟล์รายงาน STAFF TIME (.xlsx) - Compact
+        # CARD 1: ไฟล์รายงาน STAFF TIME (.xlsx) - Smart Drop Zone & File Chip
         self.card_main = ctk.CTkFrame(
             main_scroll,
             corner_radius=14,
@@ -4930,26 +5037,63 @@ class ModernCustomTkinterApp:
             border_color=self.color_border
         )
         self.card_main.grid(row=0, column=0, sticky="ew", pady=(0, 8), padx=4)
-        self.card_main.grid_columnconfigure(1, weight=1)
+        self.card_main.grid_columnconfigure(0, weight=1)
 
-        c1_row = ctk.CTkFrame(self.card_main, fg_color="transparent")
-        c1_row.pack(fill="x", padx=16, pady=10)
-        c1_row.grid_columnconfigure(1, weight=1)
+        c1_head = ctk.CTkFrame(self.card_main, fg_color="transparent")
+        c1_head.pack(fill="x", padx=16, pady=(10, 4))
+        c1_head.grid_columnconfigure(1, weight=1)
 
         badge_c1 = ctk.CTkLabel(
-            c1_row,
+            c1_head,
             text="ขั้นตอนที่ 1",
             font=self.font_sm,
             fg_color=self.color_primary,
             text_color="#ffffff",
             corner_radius=8,
-            height=30,
+            height=28,
             width=85
         )
         badge_c1.grid(row=0, column=0, padx=(0, 12))
 
+        lbl_c1_title = ctk.CTkLabel(
+            c1_head,
+            text="ไฟล์รายงานเวลาทำงาน STAFF TIME ประจำงวด (.xlsx)",
+            font=self.font_h2,
+            text_color=self.color_text_dark
+        )
+        lbl_c1_title.grid(row=0, column=1, sticky="w")
+
+        # Card 1 File Loaded Chip
+        self.chip_main = ctk.CTkFrame(self.card_main, fg_color="#f0fdf4", border_width=1.5, border_color="#86efac", corner_radius=10)
+        chip_m_left = ctk.CTkFrame(self.chip_main, fg_color="transparent")
+        chip_m_left.pack(side="left", padx=12, pady=8)
+        
+        lbl_badge_m = ctk.CTkLabel(chip_m_left, text="XLSX", font=self.font_sm, fg_color="#10b981", text_color="#ffffff", corner_radius=6, width=48, height=26)
+        lbl_badge_m.pack(side="left", padx=(0, 10))
+
+        chip_m_text = ctk.CTkFrame(chip_m_left, fg_color="transparent")
+        chip_m_text.pack(side="left")
+        self.lbl_chip_main_name = ctk.CTkLabel(chip_m_text, text="STAFF TIME.xlsx", font=self.font_btn, text_color=self.color_text_dark)
+        self.lbl_chip_main_name.pack(anchor="w")
+        self.lbl_chip_main_meta = ctk.CTkLabel(chip_m_text, text="0 KB • พร้อมประมวลผล", font=self.font_sm, text_color=self.color_emerald)
+        self.lbl_chip_main_meta.pack(anchor="w")
+
+        chip_m_right = ctk.CTkFrame(self.chip_main, fg_color="transparent")
+        chip_m_right.pack(side="right", padx=12, pady=8)
+
+        btn_chg_main = ctk.CTkButton(chip_m_right, text="เปลี่ยนไฟล์...", font=self.font_sm, fg_color=self.color_accent, hover_color=self.color_accent_hover, height=34, width=110, corner_radius=8, command=self.browse_main)
+        btn_chg_main.pack(side="left", padx=(0, 6))
+
+        btn_clr_main = ctk.CTkButton(chip_m_right, text="ล้าง", font=self.font_sm, fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", border_width=1, border_color="#cbd5e1", height=34, width=60, corner_radius=8, command=lambda: [self.txt_main.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
+        btn_clr_main.pack(side="left")
+
+        # Card 1 Empty Drop Row
+        self.c1_empty_row = ctk.CTkFrame(self.card_main, fg_color="transparent")
+        self.c1_empty_row.pack(fill="x", padx=16, pady=(4, 10))
+        self.c1_empty_row.grid_columnconfigure(0, weight=1)
+
         self.txt_main = ctk.CTkEntry(
-            c1_row,
+            self.c1_empty_row,
             placeholder_text="คลิกปุ่มด้านขวา หรือ ลากไฟล์ STAFF TIME ประจำงวด (.xlsx) มาวางที่นี่...",
             font=self.font_body,
             height=40,
@@ -4959,10 +5103,11 @@ class ModernCustomTkinterApp:
             fg_color="#ffffff",
             text_color=self.color_text_dark
         )
-        self.txt_main.grid(row=0, column=1, sticky="ew", padx=(0, 10))
+        self.txt_main.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.txt_main.bind("<KeyRelease>", lambda e: self._refresh_file_ui())
 
         btn_browse_main = ctk.CTkButton(
-            c1_row,
+            self.c1_empty_row,
             text="เลือกไฟล์ STAFF TIME...",
             font=self.font_btn,
             fg_color=self.color_primary,
@@ -4972,12 +5117,12 @@ class ModernCustomTkinterApp:
             corner_radius=8,
             command=self.browse_main
         )
-        btn_browse_main.grid(row=0, column=2)
+        btn_browse_main.grid(row=0, column=1)
 
         add_tooltip(self.txt_main, "ช่องระบุที่อยู่ไฟล์ STAFF TIME (.xlsx) - สามารถคลิกเลือกหรือลากไฟล์มาวางได้โดยตรง")
         add_tooltip(btn_browse_main, "คลิกเพื่อค้นหาและเลือกไฟล์รายงาน STAFF TIME ประจำงวด (.xlsx)")
 
-        # CARD 2: ข้อมูลนำเข้า 2 แหล่ง (การลาที่ได้รับการอนุมัติ & ใบแจ้งการมาทำงาน) - Compact Single-Level
+        # CARD 2: ข้อมูลนำเข้า 2 แหล่ง (การลาที่ได้รับการอนุมัติ & ใบแจ้งการมาทำงาน)
         self.card_sources = ctk.CTkFrame(
             main_scroll,
             corner_radius=14,
@@ -4988,9 +5133,8 @@ class ModernCustomTkinterApp:
         self.card_sources.grid(row=1, column=0, sticky="ew", pady=(0, 8), padx=4)
         self.card_sources.grid_columnconfigure(0, weight=1)
 
-        # แถบหัวข้อ Card 2 (กะทัดรัด)
         c2_head = ctk.CTkFrame(self.card_sources, fg_color="transparent")
-        c2_head.pack(fill="x", padx=16, pady=(8, 4))
+        c2_head.pack(fill="x", padx=16, pady=(10, 4))
 
         badge_c2 = ctk.CTkLabel(
             c2_head,
@@ -5013,24 +5157,36 @@ class ModernCustomTkinterApp:
         lbl_c2_title.pack(side="left")
 
         # 2.1 แถวข้อมูลวันลา (Row 1)
-        r_leave = ctk.CTkFrame(self.card_sources, fg_color="transparent")
-        r_leave.pack(fill="x", padx=16, pady=(2, 4))
-        r_leave.grid_columnconfigure(1, weight=1)
+        # Chip Leave
+        self.chip_appr = ctk.CTkFrame(self.card_sources, fg_color="#f0fdf4", border_width=1.5, border_color="#86efac", corner_radius=10)
+        chip_ap_left = ctk.CTkFrame(self.chip_appr, fg_color="transparent")
+        chip_ap_left.pack(side="left", padx=12, pady=6)
+        lbl_badge_ap = ctk.CTkLabel(chip_ap_left, text="วันลา", font=self.font_sm, fg_color=self.color_accent, text_color="#ffffff", corner_radius=6, width=60, height=24)
+        lbl_badge_ap.pack(side="left", padx=(0, 10))
+        chip_ap_text = ctk.CTkFrame(chip_ap_left, fg_color="transparent")
+        chip_ap_text.pack(side="left")
+        self.lbl_chip_appr_name = ctk.CTkLabel(chip_ap_text, text="อนุมัติการลา.xlsx", font=self.font_btn, text_color=self.color_text_dark)
+        self.lbl_chip_appr_name.pack(anchor="w")
+        self.lbl_chip_appr_meta = ctk.CTkLabel(chip_ap_text, text="0 KB • พร้อมใช้งาน", font=self.font_sm, text_color=self.color_emerald)
+        self.lbl_chip_appr_meta.pack(anchor="w")
 
-        badge_leave = ctk.CTkLabel(
-            r_leave,
-            text="ข้อมูลวันลา",
-            font=self.font_sm,
-            fg_color=self.color_accent,
-            text_color="#ffffff",
-            corner_radius=8,
-            height=30,
-            width=85
-        )
+        chip_ap_right = ctk.CTkFrame(self.chip_appr, fg_color="transparent")
+        chip_ap_right.pack(side="right", padx=12, pady=6)
+        btn_chg_appr = ctk.CTkButton(chip_ap_right, text="เปลี่ยนไฟล์...", font=self.font_sm, fg_color=self.color_accent, hover_color=self.color_accent_hover, height=32, width=100, corner_radius=8, command=self.browse_appr)
+        btn_chg_appr.pack(side="left", padx=(0, 6))
+        btn_clr_ap = ctk.CTkButton(chip_ap_right, text="ล้าง", font=self.font_sm, fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", border_width=1, border_color="#cbd5e1", height=32, width=55, corner_radius=8, command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
+        btn_clr_ap.pack(side="left")
+
+        # Empty Leave Row
+        self.r_leave_empty = ctk.CTkFrame(self.card_sources, fg_color="transparent")
+        self.r_leave_empty.pack(fill="x", padx=16, pady=(2, 6))
+        self.r_leave_empty.grid_columnconfigure(1, weight=1)
+
+        badge_leave = ctk.CTkLabel(self.r_leave_empty, text="ข้อมูลวันลา", font=self.font_sm, fg_color=self.color_accent, text_color="#ffffff", corner_radius=8, height=30, width=85)
         badge_leave.grid(row=0, column=0, padx=(0, 12))
 
         self.txt_appr = ctk.CTkEntry(
-            r_leave,
+            self.r_leave_empty,
             placeholder_text="คลิกเลือก หรือลากไฟล์การลาที่ได้รับอนุมัติ (เช่น อนุมัติ.xlsx)...",
             font=self.font_body,
             height=38,
@@ -5041,9 +5197,10 @@ class ModernCustomTkinterApp:
             text_color=self.color_text_dark
         )
         self.txt_appr.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        self.txt_appr.bind("<KeyRelease>", lambda e: self._refresh_file_ui())
 
         btn_browse_appr = ctk.CTkButton(
-            r_leave,
+            self.r_leave_empty,
             text="เลือกไฟล์วันลา...",
             font=self.font_btn,
             fg_color=self.color_accent,
@@ -5056,7 +5213,7 @@ class ModernCustomTkinterApp:
         btn_browse_appr.grid(row=0, column=2, padx=(0, 6))
 
         btn_clear_appr = ctk.CTkButton(
-            r_leave,
+            self.r_leave_empty,
             text="ล้าง",
             font=self.font_sm,
             fg_color="#f1f5f9",
@@ -5067,29 +5224,41 @@ class ModernCustomTkinterApp:
             height=38,
             width=55,
             corner_radius=8,
-            command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings()]
+            command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()]
         )
         btn_clear_appr.grid(row=0, column=3)
 
         # 2.2 แถวใบแจ้งเวลาทำงาน (Row 2)
-        r_att = ctk.CTkFrame(self.card_sources, fg_color="transparent")
-        r_att.pack(fill="x", padx=16, pady=(2, 10))
-        r_att.grid_columnconfigure(1, weight=1)
+        # Chip Attendance
+        self.chip_att = ctk.CTkFrame(self.card_sources, fg_color="#f0fdf4", border_width=1.5, border_color="#86efac", corner_radius=10)
+        chip_at_left = ctk.CTkFrame(self.chip_att, fg_color="transparent")
+        chip_at_left.pack(side="left", padx=12, pady=6)
+        lbl_badge_at = ctk.CTkLabel(chip_at_left, text="ใบแจ้งเวลา", font=self.font_sm, fg_color=self.color_emerald, text_color="#ffffff", corner_radius=6, width=70, height=24)
+        lbl_badge_at.pack(side="left", padx=(0, 10))
+        chip_at_text = ctk.CTkFrame(chip_at_left, fg_color="transparent")
+        chip_at_text.pack(side="left")
+        self.lbl_chip_att_name = ctk.CTkLabel(chip_at_text, text="ใบแจ้งการมาทำงาน.xlsx", font=self.font_btn, text_color=self.color_text_dark)
+        self.lbl_chip_att_name.pack(anchor="w")
+        self.lbl_chip_att_meta = ctk.CTkLabel(chip_at_text, text="0 KB • พร้อมใช้งาน", font=self.font_sm, text_color=self.color_emerald)
+        self.lbl_chip_att_meta.pack(anchor="w")
 
-        badge_att = ctk.CTkLabel(
-            r_att,
-            text="ใบแจ้งเวลา",
-            font=self.font_sm,
-            fg_color=self.color_emerald,
-            text_color="#ffffff",
-            corner_radius=8,
-            height=30,
-            width=85
-        )
+        chip_at_right = ctk.CTkFrame(self.chip_att, fg_color="transparent")
+        chip_at_right.pack(side="right", padx=12, pady=6)
+        btn_chg_att = ctk.CTkButton(chip_at_right, text="เปลี่ยนไฟล์...", font=self.font_sm, fg_color=self.color_emerald, hover_color=self.color_emerald_hover, height=32, width=100, corner_radius=8, command=self.browse_att)
+        btn_chg_att.pack(side="left", padx=(0, 6))
+        btn_clr_at = ctk.CTkButton(chip_at_right, text="ล้าง", font=self.font_sm, fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", border_width=1, border_color="#cbd5e1", height=32, width=55, corner_radius=8, command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
+        btn_clr_at.pack(side="left")
+
+        # Empty Attendance Row
+        self.r_att_empty = ctk.CTkFrame(self.card_sources, fg_color="transparent")
+        self.r_att_empty.pack(fill="x", padx=16, pady=(2, 10))
+        self.r_att_empty.grid_columnconfigure(1, weight=1)
+
+        badge_att = ctk.CTkLabel(self.r_att_empty, text="ใบแจ้งเวลา", font=self.font_sm, fg_color=self.color_emerald, text_color="#ffffff", corner_radius=8, height=30, width=85)
         badge_att.grid(row=0, column=0, padx=(0, 12))
 
         self.txt_att = ctk.CTkEntry(
-            r_att,
+            self.r_att_empty,
             placeholder_text="คลิกเลือก หรือลากไฟล์ใบแจ้งการมาทำงาน / ลืมสแกนนิ้ว (ถ้ามี)...",
             font=self.font_body,
             height=38,
@@ -5100,9 +5269,10 @@ class ModernCustomTkinterApp:
             text_color=self.color_text_dark
         )
         self.txt_att.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        self.txt_att.bind("<KeyRelease>", lambda e: self._refresh_file_ui())
 
         btn_browse_att = ctk.CTkButton(
-            r_att,
+            self.r_att_empty,
             text="เลือกใบแจ้งเวลา...",
             font=self.font_btn,
             fg_color=self.color_emerald,
@@ -5115,7 +5285,7 @@ class ModernCustomTkinterApp:
         btn_browse_att.grid(row=0, column=2, padx=(0, 6))
 
         btn_clear_att = ctk.CTkButton(
-            r_att,
+            self.r_att_empty,
             text="ล้าง",
             font=self.font_sm,
             fg_color="#f1f5f9",
@@ -5126,7 +5296,7 @@ class ModernCustomTkinterApp:
             height=38,
             width=55,
             corner_radius=8,
-            command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings()]
+            command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()]
         )
         btn_clear_att.grid(row=0, column=3)
 
@@ -5399,7 +5569,7 @@ class ModernCustomTkinterApp:
 
         # 5. ปุ่มแอคชันหลัก: ตรวจสอบรายการแก้ไข & ปุ่มเริ่มประมวลผล (Compact & Senior-Friendly)
         action_frame = ctk.CTkFrame(main_scroll, fg_color="transparent")
-        action_frame.grid(row=4, column=0, sticky="ew", pady=(2, 8), padx=4)
+        action_frame.grid(row=4, column=0, sticky="ew", pady=(4, 8), padx=4)
         action_frame.grid_columnconfigure(0, weight=1)
 
         self.btn_preview = ctk.CTkButton(
@@ -5429,6 +5599,7 @@ class ModernCustomTkinterApp:
         add_tooltip(self.btn_preview, "จำลองการประมวลผลเพื่อตรวจสอบรายการแก้ไขทุกจุดแบบละเอียดก่อนบันทึกลงไฟล์จริง")
         add_tooltip(self.btn_process, "เริ่มประมวลผล นำข้อมูลการลาและเวลาทำงานมาบันทึกลงไฟล์ STAFF TIME ทันที")
 
+        # Modern Progress Bar & Status Text Indicator (แก้ปัญหาจุดเขียวเล็ก ดูคล้าย error)
         self.progress_bar = ctk.CTkProgressBar(
             action_frame,
             height=10,
@@ -5439,7 +5610,19 @@ class ModernCustomTkinterApp:
         self.progress_bar.set(0.0)
         self.progress_bar.grid(row=2, column=0, sticky="ew")
 
-        # 6. หน้าต่างแสดงผลการทำงาน (Live Log Box - Compact)
+        prog_info_box = ctk.CTkFrame(action_frame, fg_color="transparent")
+        prog_info_box.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        prog_info_box.grid_columnconfigure(0, weight=1)
+
+        self.lbl_progress_status = ctk.CTkLabel(
+            prog_info_box,
+            text="⚪ สถานะระบบ: พร้อมเริ่มทำงาน (0%)",
+            font=self.font_sm,
+            text_color=self.color_text_muted
+        )
+        self.lbl_progress_status.grid(row=0, column=0, sticky="w")
+
+        # 6. หน้าต่างแสดงผลการทำงาน (Developer Console)
         self.card_log = ctk.CTkFrame(
             main_scroll,
             corner_radius=14,
@@ -5447,7 +5630,7 @@ class ModernCustomTkinterApp:
             border_width=1.5,
             border_color=self.color_border
         )
-        self.card_log.grid(row=5, column=0, sticky="ew", pady=(2, 4), padx=4)
+        self.card_log.grid(row=5, column=0, sticky="ew", pady=(4, 8), padx=4)
         self.card_log.grid_columnconfigure(0, weight=1)
 
         log_top_frame = ctk.CTkFrame(self.card_log, fg_color="transparent")
@@ -5459,27 +5642,30 @@ class ModernCustomTkinterApp:
 
         badge_log = ctk.CTkLabel(
             log_h_box,
-            text="ระบบตรวจสอบ",
+            text="Console",
             font=self.font_sm,
             fg_color="#334155",
             text_color="#ffffff",
             corner_radius=8,
             height=26,
-            width=85
+            width=75
         )
         badge_log.pack(side="left", padx=(0, 10))
 
         lbl_log_title = ctk.CTkLabel(
             log_h_box,
-            text="บันทึกสถานะการทำงาน (Activity Log)",
+            text="บันทึกสถานะการทำงาน (Developer Console)",
             font=self.font_h2,
             text_color=self.color_text_dark
         )
         lbl_log_title.pack(side="left")
 
+        log_actions_box = ctk.CTkFrame(log_top_frame, fg_color="transparent")
+        log_actions_box.grid(row=0, column=1, sticky="e")
+
         self.btn_open_report = ctk.CTkButton(
-            log_top_frame,
-            text="เปิดรายงานตรวจสอบ",
+            log_actions_box,
+            text="📄 รายงานตรวจสอบ",
             font=self.font_sm,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
@@ -5488,11 +5674,11 @@ class ModernCustomTkinterApp:
             state="disabled",
             command=self.open_audit_report
         )
-        self.btn_open_report.grid(row=0, column=1, padx=(0, 6))
+        self.btn_open_report.pack(side="left", padx=(0, 6))
 
         self.btn_open_folder = ctk.CTkButton(
-            log_top_frame,
-            text="เปิดโฟลเดอร์ผลลัพธ์",
+            log_actions_box,
+            text="📁 โฟลเดอร์ผลลัพธ์",
             font=self.font_sm,
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
@@ -5501,11 +5687,11 @@ class ModernCustomTkinterApp:
             state="disabled",
             command=self.open_result_folder
         )
-        self.btn_open_folder.grid(row=0, column=2, padx=(0, 6))
+        self.btn_open_folder.pack(side="left", padx=(0, 6))
 
-        btn_clear_log = ctk.CTkButton(
-            log_top_frame,
-            text="ล้างข้อความ",
+        btn_copy_log = ctk.CTkButton(
+            log_actions_box,
+            text="📋 คัดลอก Log",
             font=self.font_sm,
             fg_color="#f1f5f9",
             hover_color="#e2e8f0",
@@ -5513,19 +5699,35 @@ class ModernCustomTkinterApp:
             border_width=1,
             border_color="#cbd5e1",
             height=32,
-            width=80,
+            corner_radius=8,
+            command=self.copy_log_to_clipboard
+        )
+        btn_copy_log.pack(side="left", padx=(0, 6))
+
+        btn_clear_log = ctk.CTkButton(
+            log_actions_box,
+            text="🧹 ล้าง",
+            font=self.font_sm,
+            fg_color="#f1f5f9",
+            hover_color="#e2e8f0",
+            text_color="#334155",
+            border_width=1,
+            border_color="#cbd5e1",
+            height=32,
+            width=65,
             corner_radius=8,
             command=self.clear_log
         )
-        btn_clear_log.grid(row=0, column=3)
+        btn_clear_log.pack(side="left")
 
         add_tooltip(self.btn_open_report, "เปิดไฟล์รายงานตรวจสอบ (Audit Report) สรุปรายการทั้งหมดที่อัปเดต")
         add_tooltip(self.btn_open_folder, "เปิดโฟลเดอร์ที่เก็บไฟล์ผลลัพธ์ใน File Explorer")
-        add_tooltip(btn_clear_log, "ล้างข้อความประวัติในกล่องบันทึกสถานะ")
+        add_tooltip(btn_copy_log, "คัดลอกข้อความ Log ทั้งหมดลงใน Clipboard")
+        add_tooltip(btn_clear_log, "ล้างข้อความใน Developer Console")
 
         self.txt_log = ctk.CTkTextbox(
             self.card_log,
-            height=140,
+            height=145,
             corner_radius=10,
             font=self.font_body,
             fg_color="#f8fafc",
@@ -5538,20 +5740,19 @@ class ModernCustomTkinterApp:
         # กำหนดแท็กสีข้อความสำหรับบันทึกสถานะ (Semantic Status Badges - UI/UX Pro Max)
         try:
             tb = self.txt_log._textbox
-            tb.tag_configure("tag_success", foreground="#16a34a", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_skip", foreground="#d97706", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_warn", foreground="#dc2626", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_info", foreground="#2563eb", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_success", foreground="#15803d", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_skip", foreground="#b45309", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_warn", foreground="#b91c1c", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_info", foreground="#1d4ed8", font=(self.font_family, 12, "bold"))
             tb.tag_configure("tag_normal", foreground="#0f172a", font=(self.font_family, 12))
         except Exception:
             pass
 
         # -------------------------------------------------------------
-        # 3. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Footer Status & Credits)
+        # 4. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Footer Status & Credits)
         # -------------------------------------------------------------
-        self.root.grid_rowconfigure(2, weight=0)
         footer_bar = ctk.CTkFrame(self.root, fg_color=self.color_navy, corner_radius=0, height=32)
-        footer_bar.grid(row=2, column=0, sticky="ew")
+        footer_bar.grid(row=3, column=0, sticky="ew")
         lbl_footer = ctk.CTkLabel(
             footer_bar,
             text="CNT STAFF TIME AUTOMATION SUITE 2026  •  BY WERAWAT THAMRONGDULLAPARK  •  CHRISTIANI & NIELSEN (THAI) PCL.",
@@ -5560,8 +5761,145 @@ class ModernCustomTkinterApp:
         )
         lbl_footer.pack(pady=5)
 
-        self.log("ระบบพร้อมทำงาน... กรุณาเลือกไฟล์ STAFF TIME และข้อมูลที่ต้องการ")
+        self.log("Developer Console พร้อมทำงาน — ระบบ Universal Edition 2026 พร้อมสำหรับการประมวลผล")
         self.log("คำแนะนำ: สามารถกด 'ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง' เพื่อดูพรีวิวทุกจุดก่อนบันทึกจริงได้เสมอ")
+
+    def copy_log_to_clipboard(self):
+        """คัดลอกข้อความ Log ทั้งหมดลงใน Windows Clipboard"""
+        try:
+            content = self.txt_log.get("1.0", "end").strip()
+            if content:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(content)
+                self.show_toast("📋 คัดลอก Log ทั้งหมดลง Clipboard เรียบร้อยแล้ว", "success")
+            else:
+                self.show_toast("ไม่มีข้อความใน Log ให้คัดลอก", "warning")
+        except Exception as e:
+            self.show_toast(f"ไม่สามารถคัดลอกได้: {e}", "error")
+
+    def _refresh_file_ui(self):
+        """อัปเดตการแสดงผล Smart File Chip และ Workflow Stepper ตามสถานะไฟล์จริง"""
+        # 1. STAFF TIME File
+        main_p = self.txt_main.get().strip() if hasattr(self, 'txt_main') else ""
+        if main_p and os.path.exists(main_p):
+            fname = os.path.basename(main_p)
+            try:
+                sz = format_file_size(os.path.getsize(main_p))
+            except Exception:
+                sz = ""
+            self.lbl_chip_main_name.configure(text=fname)
+            self.lbl_chip_main_meta.configure(text=f"{sz} • 🟢 โหลดสมบูรณ์ พร้อมประมวลผล")
+            self.chip_main.pack(fill="x", padx=16, pady=(4, 10))
+            self.c1_empty_row.pack_forget()
+        else:
+            self.chip_main.pack_forget()
+            self.c1_empty_row.pack(fill="x", padx=16, pady=(4, 10))
+
+        # 2. Approved Leave File
+        appr_p = self.txt_appr.get().strip() if hasattr(self, 'txt_appr') else ""
+        if appr_p and os.path.exists(appr_p):
+            fname = os.path.basename(appr_p)
+            try:
+                sz = format_file_size(os.path.getsize(appr_p))
+            except Exception:
+                sz = ""
+            self.lbl_chip_appr_name.configure(text=fname)
+            self.lbl_chip_appr_meta.configure(text=f"{sz} • 🟢 พร้อมใช้งาน")
+            self.chip_appr.pack(fill="x", padx=16, pady=(2, 6))
+            self.r_leave_empty.pack_forget()
+        else:
+            self.chip_appr.pack_forget()
+            self.r_leave_empty.pack(fill="x", padx=16, pady=(2, 6))
+
+        # 3. Attendance File
+        att_p = self.txt_att.get().strip() if hasattr(self, 'txt_att') else ""
+        if att_p and os.path.exists(att_p):
+            fname = os.path.basename(att_p)
+            try:
+                sz = format_file_size(os.path.getsize(att_p))
+            except Exception:
+                sz = ""
+            self.lbl_chip_att_name.configure(text=fname)
+            self.lbl_chip_att_meta.configure(text=f"{sz} • 🟢 พร้อมใช้งาน")
+            self.chip_att.pack(fill="x", padx=16, pady=(2, 10))
+            self.r_att_empty.pack_forget()
+        else:
+            self.chip_att.pack_forget()
+            self.r_att_empty.pack(fill="x", padx=16, pady=(2, 10))
+
+        self.update_workflow_stepper()
+
+    def update_workflow_stepper(self):
+        """อัปเดตสถานะและสีของ 6 ขั้นตอนใน Workflow Stepper แบบ Real-Time"""
+        try:
+            main_p = self.txt_main.get().strip() if hasattr(self, 'txt_main') else ""
+            has_main = bool(main_p and os.path.exists(main_p))
+
+            appr_p = self.txt_appr.get().strip() if hasattr(self, 'txt_appr') else ""
+            att_p = self.txt_att.get().strip() if hasattr(self, 'txt_att') else ""
+            has_appr = bool(appr_p and os.path.exists(appr_p))
+            has_att = bool(att_p and os.path.exists(att_p))
+            has_inputs = has_appr or has_att
+
+            # Step 1
+            if has_main:
+                self._set_step_status(1, "completed", "✓ พร้อมใช้งาน")
+            else:
+                self._set_step_status(1, "waiting", "○ รอเลือกไฟล์")
+
+            # Step 2
+            if has_inputs:
+                cnt = (1 if has_appr else 0) + (1 if has_att else 0)
+                self._set_step_status(2, "completed", f"✓ {cnt} แหล่งข้อมูล")
+            else:
+                self._set_step_status(2, "waiting", "○ รอเลือกไฟล์")
+
+            # Step 3
+            self._set_step_status(3, "completed", "✓ กำหนดแล้ว")
+
+            # Step 4
+            sm = self.save_mode_var.get() if hasattr(self, 'save_mode_var') else "new_file"
+            sm_lbl = "✓ ไฟล์ใหม่" if sm == "new_file" else "✓ บันทึกทับ"
+            self._set_step_status(4, "completed", sm_lbl)
+
+            # Step 5
+            if getattr(self, 'precheck_done', False):
+                self._set_step_status(5, "completed", "✓ ตรวจแล้ว")
+            elif has_main and has_inputs:
+                self._set_step_status(5, "ready", "● พร้อมตรวจ")
+            else:
+                self._set_step_status(5, "waiting", "○ รอดำเนินการ")
+
+            # Step 6
+            if getattr(self, 'is_processing', False):
+                self._set_step_status(6, "active", "⏳ กำลังทำงาน")
+            elif getattr(self, 'processing_done', False):
+                self._set_step_status(6, "completed", "✓ สำเร็จ")
+            elif has_main and has_inputs:
+                self._set_step_status(6, "ready", "● พร้อมเริ่มงาน")
+            else:
+                self._set_step_status(6, "waiting", "○ รอดำเนินการ")
+        except Exception:
+            pass
+
+    def _set_step_status(self, step_num, status, sub_text):
+        if not hasattr(self, 'step_cards') or step_num not in self.step_cards:
+            return
+        card = self.step_cards[step_num]
+        lbl_sub = self.step_sublabels[step_num]
+
+        theme = {
+            "completed": ("#ecfdf5", "#a7f3d0", "#059669"),
+            "ready": ("#eff6ff", "#bfdbfe", "#0071e3"),
+            "active": ("#fef3c7", "#fde68a", "#b45309"),
+            "waiting": ("#f8fafc", "#e2e8f0", "#94a3b8")
+        }
+        bg, border, text_c = theme.get(status, theme["waiting"])
+        try:
+            card.configure(fg_color=bg, border_color=border)
+            lbl_sub.configure(text=sub_text, text_color=text_c)
+        except Exception:
+            pass
 
     # -------------------------------------------------------------
     # ระบบการบันทึก & โหลดการตั้งค่า (Settings Persistence)
@@ -5611,6 +5949,8 @@ class ModernCustomTkinterApp:
         if hasattr(self, "entry_github_repo"):
             self.entry_github_repo.delete(0, 'end')
             self.entry_github_repo.insert(0, self.github_repo)
+
+        self._refresh_file_ui()
 
     def save_current_settings(self):
         repo_val = self.github_repo
@@ -5677,6 +6017,7 @@ class ModernCustomTkinterApp:
                 self.txt_appr.insert(0, p)
                 self.save_current_settings()
                 self._flash_card(self.card_sources)
+                self._refresh_file_ui()
                 self.log(f"ลากและวางไฟล์การลาที่ได้รับอนุมัติ: {os.path.basename(p)}")
                 self.show_toast(f"📥 ระบุไฟล์วันลา: {os.path.basename(p)}", "success")
             elif "ใบแจ้ง" in fn or "attendance" in fn or "ลืม" in fn:
@@ -5684,6 +6025,7 @@ class ModernCustomTkinterApp:
                 self.txt_att.insert(0, p)
                 self.save_current_settings()
                 self._flash_card(self.card_sources)
+                self._refresh_file_ui()
                 self.log(f"ลากและวางไฟล์ใบแจ้งเวลาทำงาน: {os.path.basename(p)}")
                 self.show_toast(f"📥 ระบุไฟล์ใบแจ้งเวลา: {os.path.basename(p)}", "success")
             else:
@@ -5692,6 +6034,7 @@ class ModernCustomTkinterApp:
                 self._auto_detect_columns_from_file(p)
                 self.save_current_settings()
                 self._flash_card(self.card_main)
+                self._refresh_file_ui()
                 self.log(f"ลากและวางไฟล์ STAFF TIME หลัก: {os.path.basename(p)}")
                 self.show_toast(f"📥 ระบุไฟล์ STAFF TIME: {os.path.basename(p)}", "success")
         else:
@@ -5716,6 +6059,7 @@ class ModernCustomTkinterApp:
             self.save_current_settings()
             self._flash_card(self.card_main)
             self._flash_card(self.card_sources)
+            self._refresh_file_ui()
             self.log("จัดไฟล์นำเข้าลงช่องทั้งหมดเรียบร้อยแล้ว")
             self.show_toast(f"📥 จัดระเบียบ {len(valid_paths)} ไฟล์ลงช่องสำเร็จ", "success")
 
@@ -5824,13 +6168,18 @@ class ModernCustomTkinterApp:
 
         self.btn_preview.configure(text="⏳ กำลังจำลองและดึงรายการแก้ไขทั้งหมด...", state="disabled")
         self.progress_bar.set(0.05)
+        self.lbl_progress_status.configure(text="⏳ กำลังจำลองและดึงรายการแก้ไขทั้งหมด... (5%)", text_color=self.color_accent)
+        self.update_workflow_stepper()
 
         def _worker():
             try:
                 def _log(msg):
                     self.root.after(0, lambda m=msg: self.log(m))
                 def _prog(val):
-                    self.root.after(0, lambda v=val: self.progress_bar.set(v / 100.0))
+                    def _update_p():
+                        self.progress_bar.set(val / 100.0)
+                        self.lbl_progress_status.configure(text=f"⏳ กำลังจำลองรายการแก้ไข... ({int(val)}%)", text_color=self.color_accent)
+                    self.root.after(0, _update_p)
 
                 summary, items = simulate_all_changes(
                     main_file, appr_file, att_file, col_cfg,
@@ -5842,7 +6191,10 @@ class ModernCustomTkinterApp:
                         text="ตรวจสอบรายการแก้ไขทั้งหมดก่อนบันทึกจริง (Pre-Check Preview)",
                         state="normal"
                     )
+                    self.precheck_done = True
                     self.progress_bar.set(1.0)
+                    self.lbl_progress_status.configure(text="✅ จำลองรายการแก้ไขสำเร็จ พร้อมตรวจสอบ (100%)", text_color=self.color_accent)
+                    self.update_workflow_stepper()
                     PreviewDialog(self.root, summary, items, on_proceed_callback=self.start_processing_thread, icon_path=self.icon_path)
 
                 self.root.after(0, _show)
@@ -5853,6 +6205,8 @@ class ModernCustomTkinterApp:
                         state="normal"
                     )
                     self.progress_bar.set(0.0)
+                    self.lbl_progress_status.configure(text="❌ เกิดข้อผิดพลาดในการจำลองข้อมูล", text_color="#dc2626")
+                    self.update_workflow_stepper()
                     messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถจำลองการแก้ไขได้:\n{err_msg}")
                 self.root.after(0, lambda err=str(e): _err(err))
 
@@ -5925,6 +6279,11 @@ class ModernCustomTkinterApp:
 
     def log(self, message):
         msg_str = str(message)
+        # เติม Timestamp ในรูปแบบ [HH:MM:SS] หากยังไม่มี
+        if not re.match(r"^\[\d{2}:\d{2}:\d{2}\]", msg_str):
+            now_str = datetime.now().strftime("%H:%M:%S")
+            msg_str = f"[{now_str}] {msg_str}"
+
         tag = "tag_normal"
         if any(w in msg_str for w in ["สำเร็จ", "อัปเดต", "พร้อมทำงาน", "สมบูรณ์"]):
             tag = "tag_success"
@@ -5945,6 +6304,8 @@ class ModernCustomTkinterApp:
 
     def clear_log(self):
         self.txt_log.delete("1.0", "end")
+        self.log("🟢 Developer Console พร้อมทำงาน — ระบบ Universal Edition 2026 พร้อมสำหรับการประมวลผล")
+        self.log("ℹ️ คำแนะนำ: สามารถกด 'ตรวจสอบรายการแก้ไข' ก่อนบันทึกจริงเพื่อตรวจสอบความถูกต้องได้เสมอ")
 
     def browse_main(self):
         filename = filedialog.askopenfilename(
@@ -5956,6 +6317,7 @@ class ModernCustomTkinterApp:
             self.txt_main.insert(0, filename)
             self._auto_detect_columns_from_file(filename)
             self.save_current_settings()
+            self._refresh_file_ui()
             self.log(f"เลือกไฟล์ STAFF TIME: {os.path.basename(filename)}")
 
     def browse_appr(self):
@@ -5967,6 +6329,7 @@ class ModernCustomTkinterApp:
             self.txt_appr.delete(0, "end")
             self.txt_appr.insert(0, filename)
             self.save_current_settings()
+            self._refresh_file_ui()
             self.log(f"เลือกไฟล์การลาที่ได้รับอนุมัติ: {os.path.basename(filename)}")
 
     def browse_att(self):
@@ -5978,6 +6341,7 @@ class ModernCustomTkinterApp:
             self.txt_att.delete(0, "end")
             self.txt_att.insert(0, filename)
             self.save_current_settings()
+            self._refresh_file_ui()
             self.log(f"⏰ เลือกใบแจ้งการมาทำงาน: {os.path.basename(filename)}")
 
     def open_result_folder(self):
@@ -6016,13 +6380,16 @@ class ModernCustomTkinterApp:
             return
 
         self.is_processing = True
+        self.processing_done = False
         self.btn_process.configure(
-            text="⏳  กำลังประมวลผลข้อมูล กรุณารอสักครู่...",
-            fg_color="#94a3b8",
+            text="⏳  กำลังประมวลผลข้อมูลลงไฟล์ STAFF TIME... (ห้ามปิดโปรแกรม)",
+            fg_color="#334155",
             state="disabled"
         )
         self.btn_preview.configure(state="disabled")
         self.progress_bar.set(0.0)
+        self.lbl_progress_status.configure(text="⏳ กำลังเตรียมการประมวลผลข้อมูล... (0%)", text_color=self.color_primary)
+        self.update_workflow_stepper()
         self.btn_open_folder.configure(state="disabled")
         self.btn_open_report.configure(state="disabled")
 
@@ -6035,6 +6402,15 @@ class ModernCustomTkinterApp:
 
     def _run_processing(self, main_file, appr_file, att_file, save_mode, col_cfg):
         try:
+            def _on_prog(p):
+                def _apply():
+                    self.progress_bar.set(p / 100.0)
+                    self.lbl_progress_status.configure(
+                        text=f"⏳ กำลังประมวลผลและเขียนข้อมูล... ({int(p)}%)",
+                        text_color=self.color_primary
+                    )
+                self.root.after(0, _apply)
+
             out_file, rep_file, total_up, total_sk = process_all_files(
                 main_filepath=main_file,
                 approval_filepath=appr_file,
@@ -6042,7 +6418,7 @@ class ModernCustomTkinterApp:
                 save_mode=save_mode,
                 col_config=col_cfg,
                 log_callback=lambda msg: self.root.after(0, self.log, msg),
-                progress_callback=lambda p: self.root.after(0, self.progress_bar.set, p / 100.0)
+                progress_callback=_on_prog
             )
             self.output_file = out_file
             self.report_file = rep_file
@@ -6055,6 +6431,10 @@ class ModernCustomTkinterApp:
                 )
                 self.btn_preview.configure(state="normal")
                 self.is_processing = False
+                self.processing_done = True
+                self.progress_bar.set(1.0)
+                self.lbl_progress_status.configure(text="✅ บันทึกข้อมูลลงไฟล์ STAFF TIME เสร็จสมบูรณ์ (100%)", text_color=self.color_emerald)
+                self.update_workflow_stepper()
                 if out_file:
                     self.btn_open_folder.configure(state="normal")
                 if rep_file:
@@ -6081,6 +6461,9 @@ class ModernCustomTkinterApp:
                 )
                 self.btn_preview.configure(state="normal")
                 self.is_processing = False
+                self.progress_bar.set(0.0)
+                self.lbl_progress_status.configure(text="❌ เกิดข้อผิดพลาดในการประมวลผล", text_color="#dc2626")
+                self.update_workflow_stepper()
                 messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถประมวลผลได้:\n{err_msg}")
             self.root.after(0, on_error, str(e))
 
