@@ -63,9 +63,9 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 # ข้อมูลเวอร์ชันและการอัปเดต (Auto-Update Configuration)
-APP_VERSION = "1.2.4"
+APP_VERSION = "1.2.5"
 DEFAULT_GITHUB_REPO = "OHM282/LeaveAutomation-CNT"
-DEFAULT_UI_FONT = "Segoe UI"
+DEFAULT_UI_FONT = "Tahoma"
 
 
 # -------------------------------------------------------------
@@ -4629,22 +4629,22 @@ class ModernCustomTkinterApp:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
         
-        # สีธีม Apple HIG + Enterprise 2026 (Clean Modern Apple Slate & System Blue)
-        self.color_navy = "#18181b"          # Header Dark Slate (Apple Pro aesthetic)
-        self.color_primary = "#0071e3"       # Apple San Francisco Blue
-        self.color_primary_hover = "#0077ed"
+        # สีธีม Enterprise 2026 (Modern Slate Navy + High Contrast)
+        self.color_navy = "#0f172a"          # Header Navy (Slate 900)
+        self.color_primary = "#1d4ed8"       # CNT Corporate Blue (Blue 700)
+        self.color_primary_hover = "#1e40af"
         self.color_accent = "#0284c7"        # Sky Blue for preview & secondary
         self.color_accent_hover = "#0369a1"
-        self.color_emerald = "#10b981"       # Apple Mint / Emerald for Main Execution CTA
-        self.color_emerald_hover = "#059669"
-        self.color_pineapple = "#10b981"     # Backward compatibility
-        self.color_coconut = "#10b981"       # Backward compatibility
+        self.color_emerald = "#059669"       # Emerald Green for Main Execution CTA
+        self.color_emerald_hover = "#047857"
+        self.color_pineapple = "#059669"     # Backward compatibility
+        self.color_coconut = "#059669"       # Backward compatibility
         self.color_card_bg = "#ffffff"
-        self.color_canvas = "#f5f5f7"        # Apple System Gray 6 (Smooth Clean Canvas)
-        self.color_border = "#e5e5ea"        # Apple System Gray 4 (Subtle 1px border)
-        self.color_border_subtle = "#f2f2f7" # Apple System Gray 5
-        self.color_text_dark = "#1d1d1f"     # Apple Primary Label Text
-        self.color_text_muted = "#6e6e73"    # Apple Secondary Label Text
+        self.color_canvas = "#f1f5f9"        # Soft Slate 100
+        self.color_border = "#cbd5e1"        # Slate 300
+        self.color_border_subtle = "#e2e8f0" # Slate 200
+        self.color_text_dark = "#0f172a"     # Slate 900 (High contrast)
+        self.color_text_muted = "#475569"    # Slate 600
 
         # -------------------------------------------------------------
         # 1. แถบหัวเรื่องพรีเมียม (2026 Enterprise Responsive Header)
