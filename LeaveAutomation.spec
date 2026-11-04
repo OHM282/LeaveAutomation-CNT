@@ -35,7 +35,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='LeaveAutomation_1856',
+    name='LeaveAutomation',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

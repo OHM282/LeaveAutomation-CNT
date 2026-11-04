@@ -2260,7 +2260,7 @@ class ManualDialog(ctk.CTkToplevel):
         c1 = self._create_card(scroll, "ขั้นตอนที่ 1", "#1d4ed8", "เลือก 'ไฟล์ STAFF TIME (.xlsx)' ประจำงวด")
         desc1 = (
             "• คลิกปุ่ม 'เลือกไฟล์ STAFF TIME...' หรือสามารถ ลากไฟล์มาวาง (Drag & Drop) ลงในกรอบที่ 1 ได้ทันที\n"
-            "• เลือกไฟล์หลักของโครงการประจำงวด เช่น '1856 3-4-5 DD.111026-311026.xlsx'\n"
+            "• เลือกไฟล์หลักของโครงการประจำงวด เช่น 'STAFF TIME-11.2026.xlsx'\n"
             "• ระบบจะตรวจสอบโครงสร้างและค้นหาชีทรายวันทั้งหมดให้โดยอัตโนมัติ (เช่น ชีท 11.10.26 ถึง 31.10.26)"
         )
         lbl1 = ctk.CTkLabel(c1, text=desc1, font=ctk.CTkFont(family=self.font_family, size=14), text_color="#1e293b", justify="left")
@@ -2390,7 +2390,7 @@ class ManualDialog(ctk.CTkToplevel):
              "ตอบ: คลิกปุ่ม 'ตรวจสอบรายคน' บนแถบด้านบนของหน้าต่างหลัก แล้วพิมพ์รหัสหรือชื่อพนักงานเพื่อค้นหาประวัติการทำงานได้ทันที"),
 
             ("คำถามที่ 4", "#0284c7", "Q: ต้องการส่งโปรแกรมให้เพื่อนร่วมงานที่โครงการอื่นใช้งาน ต้องทำอย่างไร?",
-             "ตอบ: สามารถส่งไฟล์ 'LeaveAutomation_1856.exe' หรือ 'LeaveAutomation_1856.zip' ให้เพื่อนร่วมงานได้ทันที\n"
+             "ตอบ: สามารถส่งไฟล์ 'LeaveAutomation.exe' หรือ 'LeaveAutomation.zip' ให้เพื่อนร่วมงานได้ทันที\n"
              "โปรแกรมเป็นแบบ Standalone สามารถเปิดใช้งานได้ทันทีโดยไม่ต้องติดตั้ง Python หรือโปรแกรมเสริมใดๆ ทั้งสิ้น")
         ]
 
@@ -3980,7 +3980,7 @@ def check_github_update(repo_name, current_version=APP_VERSION):
     if not repo or "/" not in repo:
         return {
             'success': False,
-            'error_msg': f"รูปแบบชื่อ GitHub Repository ไม่ถูกต้อง ('{repo}') ต้องเป็น 'owner/repo' เช่น 'DietrichGebert/LeaveAutomation-1856'"
+            'error_msg': f"รูปแบบชื่อ GitHub Repository ไม่ถูกต้อง ('{repo}') ต้องเป็น 'owner/repo' เช่น 'OHM282/LeaveAutomation-CNT'"
         }
 
     url = f"https://api.github.com/repos/{repo}/releases/latest"
@@ -4310,7 +4310,7 @@ class UpdateDialog(ctk.CTkToplevel):
     def on_save_repo_clicked(self):
         new_repo = self.txt_repo.get().strip()
         if not new_repo or "/" not in new_repo:
-            messagebox.showwarning("แจ้งเตือน", "กรุณาระบุชื่อ GitHub Repository ในรูปแบบ 'owner/repo' เช่น 'DietrichGebert/LeaveAutomation-1856'")
+            messagebox.showwarning("แจ้งเตือน", "กรุณาระบุชื่อ GitHub Repository ในรูปแบบ 'owner/repo' เช่น 'OHM282/LeaveAutomation-CNT'")
             return
         self.github_repo = new_repo
         if self.on_repo_save:
@@ -4347,7 +4347,7 @@ class UpdateDialog(ctk.CTkToplevel):
                 f"ไม่สามารถดึงข้อมูลได้:\n{err}\n\nคำแนะนำการแก้ปัญหา:\n"
                 f"1. หากยังไม่ได้สร้าง GitHub Repository ให้สร้างบน https://github.com\n"
                 f"2. ไปที่ Releases -> Create a new release\n"
-                f"3. ตั้งชื่อแท็กเวอร์ชัน เช่น v1.0.1 แล้วอัปโหลดไฟล์ LeaveAutomation_1856.exe\n"
+                f"3. ตั้งชื่อแท็กเวอร์ชัน เช่น v1.0.1 แล้วอัปโหลดไฟล์ LeaveAutomation.exe\n"
                 f"4. ตรวจสอบชื่อ Repository ด้านบนให้ถูกต้อง แล้วกด 'บันทึก & ตรวจสอบ'"
             )
             self.txt_changelog.configure(state="disabled")
@@ -4435,7 +4435,7 @@ class UpdateDialog(ctk.CTkToplevel):
                 exe_name = os.path.basename(current_exe)
             else:
                 exe_dir = os.path.dirname(os.path.abspath(__file__))
-                exe_name = "LeaveAutomation_1856.exe"
+                exe_name = "LeaveAutomation.exe"
                 current_exe = os.path.join(exe_dir, exe_name)
 
             is_zip = asset_name.lower().endswith(".zip")
@@ -4519,9 +4519,9 @@ set _MEIPASS=
 set PYI_PARENT_PID=
 set PYTHONPATH=
 set PYTHONHOME=
-title อัปเดตโปรแกรม LeaveAutomation_1856
+title อัปเดตโปรแกรม LeaveAutomation
 echo ========================================================
-echo    กำลังดำเนินการอัปเดต LeaveAutomation_1856 เป็นเวอร์ชันใหม่...
+echo    กำลังดำเนินการอัปเดต LeaveAutomation เป็นเวอร์ชันใหม่...
 echo    กรุณารอสักครู่ ห้ามปิดหน้าต่างนี้
 echo ========================================================
 timeout /t 3 /nobreak >nul
@@ -4563,7 +4563,7 @@ del "%~f0"
                 self.after(500, self._exit_app)
             else:
                 # โหมดพัฒนา (Python dev)
-                final_exe = os.path.join(exe_dir, "LeaveAutomation_1856.exe")
+                final_exe = os.path.join(exe_dir, "LeaveAutomation.exe")
                 if os.path.exists(final_exe):
                     try:
                         os.remove(final_exe)
@@ -4854,6 +4854,7 @@ class ModernCustomTkinterApp:
             variable=self.font_scale_var,
             command=self.on_font_scale_changed,
             font=self.font_util,
+            width=185,
             height=32,
             corner_radius=8,
             selected_color=self.color_primary,
