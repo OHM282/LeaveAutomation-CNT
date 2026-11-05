@@ -1,6 +1,4 @@
 # LeaveAutomation-CNT (STAFF TIME AUTOMATION)
-🍍 PINEAPPLE & COCONUT PROJECT (CN.1856 / 11867) 🥥
-
 ระบบตรวจสอบและบันทึกข้อมูลการลา & ใบแจ้งการมาทำงานลงไฟล์ STAFF TIME อัตโนมัติ (STAFF TIME Automation Tool) พัฒนาด้วย Python และ CustomTkinter สำหรับฝ่ายบุคคลและผู้บริหารโครงการ CNT
 
 ---
@@ -8,7 +6,6 @@
 ### 👨‍💻 ข้อมูลการพัฒนา
 - **ผู้พัฒนา (Developer):** คุณวีรวัช ธำรงดุลภาค (WERAWAT THAMRONGDULLAPARK)
 - **สังกัด:** บมจ. คริสเตียนีและนีลเส็น (ไทย) - Christiani & Nielsen (Thai) PCL.
-- **โครงการ:** CN.1856 (Pineapple) & CN.11867 (Coconut)
 
 ---
 
