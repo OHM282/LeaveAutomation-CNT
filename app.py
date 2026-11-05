@@ -127,23 +127,30 @@ def center_window(window, width, height, parent=None):
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
-def apply_windows_titlebar_theme(window, hex_color="#0f172a"):
-    """ปรับแต่งสี Title Bar ของ Windows 11 ให้เป็นสีตามธีม Deep Navy ด้วย Windows DWM API"""
+def apply_windows_titlebar_theme(window, hex_color="#FFFFFF", text_color="#1D1D1F"):
+    """ปรับแต่งสี Title Bar ของ Windows 11 ให้เป็นสี Soft Light ตาม Apple Design Language ด้วย Windows DWM API"""
     try:
         import ctypes
         window.update_idletasks()
         hwnd = ctypes.windll.user32.GetAncestor(window.winfo_id(), 2)
         if not hwnd:
             hwnd = window.winfo_id()
+        # DWMWA_USE_IMMERSIVE_DARK_MODE = 20 (0 = Light, 1 = Dark)
+        dark_mode = ctypes.c_int(0)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark_mode), ctypes.sizeof(dark_mode))
         # DWMWA_CAPTION_COLOR = 35 (Windows 11 Build 22000+)
-        # DWMWA_TEXT_COLOR = 36
         r = int(hex_color[1:3], 16)
         g = int(hex_color[3:5], 16)
         b = int(hex_color[5:7], 16)
         color_bgr = (b << 16) | (g << 8) | r
         c_color = ctypes.c_int(color_bgr)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(c_color), ctypes.sizeof(c_color))
-        c_text = ctypes.c_int(0x00FFFFFF)
+        # DWMWA_TEXT_COLOR = 36
+        tr = int(text_color[1:3], 16)
+        tg = int(text_color[3:5], 16)
+        tb = int(text_color[5:7], 16)
+        t_bgr = (tb << 16) | (tg << 8) | tr
+        c_text = ctypes.c_int(t_bgr)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(c_text), ctypes.sizeof(c_text))
     except Exception:
         pass
@@ -4652,7 +4659,7 @@ class ModernCustomTkinterApp:
                 
         self.github_repo = DEFAULT_GITHUB_REPO
         self.setup_ui()
-        apply_windows_titlebar_theme(self.root, self.color_navy)
+        apply_windows_titlebar_theme(self.root, hex_color="#FFFFFF", text_color="#1D1D1F")
         self.load_saved_settings()
 
         # บันทึกการตั้งค่าอัตโนมัติเมื่อปิดโปรแกรม
@@ -4675,8 +4682,21 @@ class ModernCustomTkinterApp:
         mapping = {"100%": 1.0, "115%": 1.15, "125%": 1.25}
         scale = mapping.get(val, 1.0)
         self._apply_font_scale(scale)
+        self._update_seg_font_colors(val)
         self.save_current_settings()
         self.show_toast(f"ปรับขนาดตัวอักษรเป็น {val}", "info")
+
+    def _update_seg_font_colors(self, current_val):
+        """อัปเดตสีตัวอักษรของ Segmented Button ให้ตรงตามมาตรฐาน Apple (ปุ่มที่เลือกเป็นสีขาว ปุ่มอื่นเป็นสีเข้ม)"""
+        try:
+            if hasattr(self, 'seg_font') and hasattr(self.seg_font, '_buttons_dict'):
+                for k, btn in self.seg_font._buttons_dict.items():
+                    if k == current_val:
+                        btn.configure(text_color="#FFFFFF")
+                    else:
+                        btn.configure(text_color=self.color_text_primary)
+        except Exception:
+            pass
 
     def _apply_font_scale(self, scale):
         """คำนวณและอัปเดตขนาดตัวอักษรทุกตัวแปรฟอนต์แบบเรียลไทม์ (Senior-Friendly)"""
@@ -4744,10 +4764,10 @@ class ModernCustomTkinterApp:
         if not card:
             return
         try:
-            card.configure(border_color="#2563eb", border_width=2.5)
+            card.configure(border_color="#007AFF", border_width=2.0)
             def _reset():
                 try:
-                    card.configure(border_color=self.color_border, border_width=1.5)
+                    card.configure(border_color=self.color_border, border_width=1.0)
                 except Exception:
                     pass
             self.root.after(750, _reset)
@@ -4760,30 +4780,44 @@ class ModernCustomTkinterApp:
         self.root.grid_rowconfigure(1, weight=1)  # Main macOS Split Studio Container
         self.root.grid_rowconfigure(2, weight=0)  # Slim Footer Bar
         
-        # สีธีม Apple Liquid Glass + Modern Enterprise 2026 (macOS Tahoe Palette)
-        self.color_navy = "#0f172a"          # macOS Dark Slate Navigation Header
-        self.color_primary = "#0071e3"       # Apple System Blue
-        self.color_primary_hover = "#0077ed"
-        self.color_accent = "#0284c7"        # Apple Sky Blue
-        self.color_accent_hover = "#0369a1"
-        self.color_emerald = "#059669"       # Refined Apple Emerald Green CTA
-        self.color_emerald_hover = "#047857"
-        self.color_pineapple = "#059669"     # Backward compatibility
-        self.color_coconut = "#059669"       # Backward compatibility
-        self.color_card_bg = "#ffffff"       # Frosted Glass Card Surface (Crisp White)
-        self.color_canvas = "#f1f5f9"        # Apple System Canvas (Soft Slate 100 with Tahoe ambience)
-        self.color_border = "#dbeafe"        # Apple Translucent Soft Blue Glass Border
-        self.color_border_subtle = "#e2e8f0" # Slate 200
-        self.color_text_dark = "#0f172a"     # Apple Primary Label (Slate 900, High Contrast)
-        self.color_text_muted = "#475569"    # Apple Secondary Label (Slate 600)
+        # สีธีม Apple Liquid Glass — Soft Light Premium Edition (macOS Tahoe Palette)
+        self.color_canvas = "#F5F6FA"        # Main Background (Soft Neutral Canvas)
+        self.color_card_bg = "#FFFFFF"       # Solid Working Surface (Crisp Elevated White)
+        self.color_glass_header = "#FFFFFF"  # Light Frosted Glass Header
+        self.color_border = "#D8DCE3"        # Minimal Glass Border
+        self.color_border_subtle = "#E5E7EB" # Very subtle divider
+        
+        self.color_text_primary = "#1D1D1F"  # Primary Text (Apple Dark Slate / Black)
+        self.color_text_muted = "#6E6E73"    # Secondary Text (Apple Muted Gray)
+        
+        self.color_primary = "#007AFF"       # Apple Blue
+        self.color_primary_hover = "#0062CC" # Darker Apple Blue on hover
+        self.color_accent = "#007AFF"        # Apple Blue
+        self.color_accent_hover = "#0062CC"
+        
+        self.color_emerald = "#30A46C"       # Soft Success (Apple Emerald)
+        self.color_emerald_hover = "#288A5B"
+        self.color_warning = "#D99A24"       # Warning Amber
+        self.color_error = "#E5484D"         # Error Red
+        
+        self.color_console_bg = "#1D1D1F"    # Graphite Console (Not pure black)
+        self.color_console_text = "#E5E5EA"  # Soft Gray Console Text
+        
+        # Backward compatibility aliases
+        self.color_navy = "#FFFFFF"
+        self.color_pineapple = "#30A46C"
+        self.color_coconut = "#30A46C"
+        self.color_text_dark = "#1D1D1F"
 
         # -------------------------------------------------------------
-        # 1. แถบหัวเรื่องสไตล์ macOS Unified Toolbar (คลีนหรู แถวเดียว ไม่รก)
+        # 1. แถบหัวเรื่องสไตล์ macOS Light Frosted Header (คลีนหรู สบายตา)
         # -------------------------------------------------------------
         header_frame = ctk.CTkFrame(
             self.root, 
             corner_radius=0, 
-            fg_color=self.color_navy,
+            fg_color=self.color_glass_header,
+            border_width=1,
+            border_color=self.color_border_subtle,
             height=54
         )
         header_frame.grid(row=0, column=0, sticky="ew")
@@ -4791,7 +4825,7 @@ class ModernCustomTkinterApp:
         header_frame.grid_columnconfigure(1, weight=1) # Center Nav Pills
         header_frame.grid_columnconfigure(2, weight=0) # Right Utility
 
-        # 1.1 ฝั่งซ้าย: อัตลักษณ์แบรนด์แบบมินิมอล (โลโก้ CN ไร้กรอบการ์ด ตามคำขอ)
+        # 1.1 ฝั่งซ้าย: อัตลักษณ์แบรนด์แบบมินิมอล (โลโก้ CN ไร้กรอบการ์ด)
         brand_box = ctk.CTkFrame(header_frame, fg_color="transparent")
         brand_box.grid(row=0, column=0, sticky="w", padx=(16, 10), pady=8)
 
@@ -4809,7 +4843,7 @@ class ModernCustomTkinterApp:
             brand_title_row,
             text="STAFF TIME",
             font=self.font_h2,
-            text_color="#ffffff"
+            text_color=self.color_text_primary
         )
         lbl_app_title.pack(side="left", padx=(0, 6))
 
@@ -4817,8 +4851,8 @@ class ModernCustomTkinterApp:
             brand_title_row,
             text=f"v{APP_VERSION}",
             font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"),
-            fg_color="#1d4ed8",
-            text_color="#ffffff",
+            fg_color="#EBF5FF",
+            text_color=self.color_primary,
             corner_radius=6,
             height=20,
             width=50
@@ -4829,20 +4863,20 @@ class ModernCustomTkinterApp:
             brand_text_box,
             text="CHRISTIANI & NIELSEN (THAI) PCL.",
             font=ctk.CTkFont(family=self.font_family, size=11),
-            text_color="#94a3b8"
+            text_color=self.color_text_muted
         )
         lbl_company.pack(anchor="w", pady=(1, 0))
 
-        # 1.2 กึ่งกลาง: macOS Segmented Navigation Pills
+        # 1.2 กึ่งกลาง: macOS Segmented Navigation Pills (Light Minimal)
         nav_center_box = ctk.CTkFrame(header_frame, fg_color="transparent")
         nav_center_box.grid(row=0, column=1, sticky="nsew", pady=8)
 
         nav_segmented = ctk.CTkFrame(
             nav_center_box,
-            fg_color="#1e293b",
+            fg_color="#F0F2F6",
             corner_radius=8,
             border_width=1,
-            border_color="#334155"
+            border_color=self.color_border
         )
         nav_segmented.pack(expand=True)
 
@@ -4851,9 +4885,9 @@ class ModernCustomTkinterApp:
             text="📖 คู่มือ",
             font=self.font_sm,
             fg_color="transparent",
-            hover_color="#334155",
-            text_color="#f8fafc",
-            height=32,
+            hover_color="#FFFFFF",
+            text_color=self.color_text_primary,
+            height=30,
             corner_radius=6,
             command=self.open_manual
         )
@@ -4864,9 +4898,9 @@ class ModernCustomTkinterApp:
             text="📊 สถิติภาพรวม",
             font=self.font_sm,
             fg_color="transparent",
-            hover_color="#334155",
-            text_color="#f8fafc",
-            height=32,
+            hover_color="#FFFFFF",
+            text_color=self.color_text_primary,
+            height=30,
             corner_radius=6,
             command=self.open_analytics
         )
@@ -4877,9 +4911,9 @@ class ModernCustomTkinterApp:
             text="⚠️ ตรวจเวลาผิดปกติ",
             font=self.font_sm,
             fg_color="transparent",
-            hover_color="#b45309",
-            text_color="#fef08a",
-            height=32,
+            hover_color="#FFFBEB",
+            text_color=self.color_warning,
+            height=30,
             corner_radius=6,
             command=self.open_anomaly_dialog
         )
@@ -4890,9 +4924,9 @@ class ModernCustomTkinterApp:
             text="👤 ตรวจรายคน",
             font=self.font_sm,
             fg_color="transparent",
-            hover_color="#334155",
-            text_color="#f8fafc",
-            height=32,
+            hover_color="#FFFFFF",
+            text_color=self.color_text_primary,
+            height=30,
             corner_radius=6,
             command=self.open_inspector
         )
@@ -4902,7 +4936,7 @@ class ModernCustomTkinterApp:
         utility_box = ctk.CTkFrame(header_frame, fg_color="transparent")
         utility_box.grid(row=0, column=2, sticky="e", padx=(0, 16), pady=8)
 
-        self.font_util = ctk.CTkFont(family=self.font_family, size=12, weight="bold")
+        self.font_util = ctk.CTkFont(family=self.font_family, size=11, weight="bold")
 
         self.btn_update = ctk.CTkButton(
             utility_box,
@@ -4912,6 +4946,7 @@ class ModernCustomTkinterApp:
             hover_color=self.color_primary_hover,
             text_color="#ffffff",
             height=32,
+            width=115,
             corner_radius=8,
             command=self.open_updater
         )
@@ -4923,17 +4958,18 @@ class ModernCustomTkinterApp:
             variable=self.font_scale_var,
             command=self.on_font_scale_changed,
             font=self.font_util,
-            width=185,
+            width=220,
             height=32,
             corner_radius=8,
             selected_color=self.color_primary,
             selected_hover_color=self.color_primary_hover,
-            unselected_color="#1e293b",
-            unselected_hover_color="#334155",
-            text_color="#ffffff",
-            dynamic_resizing=True
+            unselected_color="#F0F2F6",
+            unselected_hover_color="#E2E8F0",
+            text_color=self.color_text_primary,
+            dynamic_resizing=False
         )
         self.seg_font.pack(side="left")
+        self._update_seg_font_colors(self.font_scale_var.get())
 
         add_tooltip(btn_manual, "เปิดคู่มือการใช้งานระบบ บันทึกเวลาและการประมวลผลการลาอย่างละเอียด")
         add_tooltip(btn_analytics, "เปิดหน้าต่างวิเคราะห์สถิติภาพรวม การมาทำงานและประเภทการลาทั้งหมด")
@@ -4943,7 +4979,7 @@ class ModernCustomTkinterApp:
         add_tooltip(self.seg_font, "ปรับขนาดตัวอักษรทั้งโปรแกรม (100% ปกติ | 115% กลาง | 125% ใหญ่พิเศษเพื่อความสบายตา)")
 
         # -------------------------------------------------------------
-        # 2. พื้นที่หลัก: macOS Split Studio Layout (แผงไฟล์ซ้าย + พื้นที่ทำงานขวา)
+        # 2. พื้นที่หลัก: macOS Split Studio Layout (Soft Light Canvas)
         # -------------------------------------------------------------
         split_container = ctk.CTkFrame(self.root, fg_color=self.color_canvas, corner_radius=0)
         split_container.grid(row=1, column=0, sticky="nsew")
@@ -4952,15 +4988,15 @@ class ModernCustomTkinterApp:
         split_container.grid_rowconfigure(0, weight=1)
 
         # =============================================================
-        # 2A. แผงฝั่งซ้าย: SOURCE FILES HUB (รวมไฟล์เข้าชุด มีระเบียบ ไม่เกะกะ)
+        # 2A. แผงฝั่งซ้าย: SOURCE FILES HUB (Floating File Cards บนพื้น Soft Light)
         # =============================================================
         left_scroll = ctk.CTkScrollableFrame(
             split_container,
             width=435,
             corner_radius=0,
-            fg_color="#ffffff",
+            fg_color=self.color_canvas,
             border_width=1,
-            border_color="#e2e8f0"
+            border_color=self.color_border
         )
         left_scroll.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         left_scroll.grid_columnconfigure(0, weight=1)
@@ -4972,7 +5008,7 @@ class ModernCustomTkinterApp:
             left_hdr,
             text="📁 แหล่งไฟล์ข้อมูลนำเข้า (Source Files)",
             font=self.font_h2,
-            text_color=self.color_text_dark
+            text_color=self.color_text_primary
         )
         lbl_src_title.pack(anchor="w")
         lbl_src_hint = ctk.CTkLabel(
@@ -4983,12 +5019,12 @@ class ModernCustomTkinterApp:
         )
         lbl_src_hint.pack(anchor="w", pady=(1, 0))
 
-        # CARD 1: ไฟล์หลัก STAFF TIME (.xlsx)
+        # CARD 1: ไฟล์หลัก STAFF TIME (.xlsx) - Floating White Card
         self.card_main = ctk.CTkFrame(
             left_scroll,
             corner_radius=12,
-            fg_color="#f8fafc",
-            border_width=1.5,
+            fg_color=self.color_card_bg,
+            border_width=1,
             border_color=self.color_border
         )
         self.card_main.pack(fill="x", padx=12, pady=(0, 10))
@@ -5001,11 +5037,11 @@ class ModernCustomTkinterApp:
             c1_head,
             text="XLSX",
             font=self.font_sm,
-            fg_color="#10b981",
-            text_color="#ffffff",
+            fg_color="#EBF5FF",
+            text_color=self.color_primary,
             corner_radius=6,
             height=24,
-            width=50
+            width=48
         )
         badge_c1.pack(side="left", padx=(0, 8))
 
@@ -5013,28 +5049,28 @@ class ModernCustomTkinterApp:
             c1_head,
             text="1. แฟ้มหลัก STAFF TIME (.xlsx)",
             font=self.font_btn,
-            text_color=self.color_text_dark
+            text_color=self.color_text_primary
         )
         lbl_c1_title.pack(side="left")
 
-        # Chip File 1
-        self.chip_main = ctk.CTkFrame(self.card_main, fg_color="#f0fdf4", border_width=1.5, border_color="#86efac", corner_radius=10)
+        # Chip File 1 (Soft Success Glass)
+        self.chip_main = ctk.CTkFrame(self.card_main, fg_color="#F4FBF7", border_width=1, border_color="#B4E3CA", corner_radius=10)
         chip_m_left = ctk.CTkFrame(self.chip_main, fg_color="transparent")
         chip_m_left.pack(side="left", padx=10, pady=6)
-        lbl_badge_m = ctk.CTkLabel(chip_m_left, text="✓", font=self.font_sm, fg_color="#10b981", text_color="#ffffff", corner_radius=6, width=24, height=24)
+        lbl_badge_m = ctk.CTkLabel(chip_m_left, text="✓", font=self.font_sm, fg_color=self.color_emerald, text_color="#ffffff", corner_radius=6, width=24, height=24)
         lbl_badge_m.pack(side="left", padx=(0, 8))
         chip_m_text = ctk.CTkFrame(chip_m_left, fg_color="transparent")
         chip_m_text.pack(side="left")
-        self.lbl_chip_main_name = ctk.CTkLabel(chip_m_text, text="STAFF TIME.xlsx", font=self.font_sm, text_color=self.color_text_dark)
+        self.lbl_chip_main_name = ctk.CTkLabel(chip_m_text, text="STAFF TIME.xlsx", font=self.font_sm, text_color=self.color_text_primary)
         self.lbl_chip_main_name.pack(anchor="w")
         self.lbl_chip_main_meta = ctk.CTkLabel(chip_m_text, text="0 KB • พร้อมประมวลผล", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_emerald)
         self.lbl_chip_main_meta.pack(anchor="w")
 
         chip_m_right = ctk.CTkFrame(self.chip_main, fg_color="transparent")
         chip_m_right.pack(side="right", padx=10, pady=6)
-        btn_chg_main = ctk.CTkButton(chip_m_right, text="เปลี่ยน...", font=self.font_sm, fg_color=self.color_accent, hover_color=self.color_accent_hover, height=30, width=80, corner_radius=6, command=self.browse_main)
+        btn_chg_main = ctk.CTkButton(chip_m_right, text="เปลี่ยน...", font=self.font_sm, fg_color="#F0F2F6", hover_color="#E2E8F0", text_color=self.color_primary, border_width=1, border_color=self.color_border, height=30, width=75, corner_radius=6, command=self.browse_main)
         btn_chg_main.pack(side="left", padx=(0, 4))
-        btn_clr_main = ctk.CTkButton(chip_m_right, text="ล้าง", font=self.font_sm, fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", border_width=1, border_color="#cbd5e1", height=30, width=45, corner_radius=6, command=lambda: [self.txt_main.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
+        btn_clr_main = ctk.CTkButton(chip_m_right, text="ล้าง", font=self.font_sm, fg_color="#F0F2F6", hover_color="#E2E8F0", text_color=self.color_text_muted, border_width=1, border_color=self.color_border, height=30, width=45, corner_radius=6, command=lambda: [self.txt_main.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
         btn_clr_main.pack(side="left")
 
         # Empty File 1 Row
@@ -5048,10 +5084,10 @@ class ModernCustomTkinterApp:
             font=self.font_body,
             height=36,
             corner_radius=8,
-            border_width=1.5,
-            border_color="#cbd5e1",
-            fg_color="#ffffff",
-            text_color=self.color_text_dark
+            border_width=1,
+            border_color=self.color_border,
+            fg_color="#FFFFFF",
+            text_color=self.color_text_primary
         )
         self.txt_main.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.txt_main.bind("<KeyRelease>", lambda e: self._refresh_file_ui())
@@ -5063,7 +5099,7 @@ class ModernCustomTkinterApp:
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
             height=36,
-            width=100,
+            width=95,
             corner_radius=8,
             command=self.browse_main
         )
@@ -5072,12 +5108,12 @@ class ModernCustomTkinterApp:
         add_tooltip(self.txt_main, "ช่องระบุที่อยู่ไฟล์ STAFF TIME (.xlsx) - สามารถคลิกเลือกหรือลากไฟล์มาวางได้โดยตรง")
         add_tooltip(btn_browse_main, "คลิกเพื่อค้นหาและเลือกไฟล์รายงาน STAFF TIME ประจำงวด (.xlsx)")
 
-        # CARD 2: ข้อมูลวันลา และ ใบแจ้งเวลาทำงาน
+        # CARD 2: ข้อมูลวันลา และ ใบแจ้งเวลาทำงาน - Floating White Card
         self.card_sources = ctk.CTkFrame(
             left_scroll,
             corner_radius=12,
-            fg_color="#f8fafc",
-            border_width=1.5,
+            fg_color=self.color_card_bg,
+            border_width=1,
             border_color=self.color_border
         )
         self.card_sources.pack(fill="x", padx=12, pady=(0, 10))
@@ -5089,29 +5125,29 @@ class ModernCustomTkinterApp:
 
         c2_head = ctk.CTkFrame(self.box_leave, fg_color="transparent")
         c2_head.pack(fill="x", pady=(2, 4))
-        badge_c2 = ctk.CTkLabel(c2_head, text="LEAVE", font=self.font_sm, fg_color="#f59e0b", text_color="#ffffff", corner_radius=6, height=24, width=50)
+        badge_c2 = ctk.CTkLabel(c2_head, text="LEAVE", font=self.font_sm, fg_color="#FEF3C7", text_color=self.color_warning, corner_radius=6, height=24, width=50)
         badge_c2.pack(side="left", padx=(0, 8))
-        lbl_c2_title = ctk.CTkLabel(c2_head, text="2. ข้อมูลวันลาอนุมัติ (CNTIWEB)", font=self.font_btn, text_color=self.color_text_dark)
+        lbl_c2_title = ctk.CTkLabel(c2_head, text="2. ข้อมูลวันลาอนุมัติ (CNTIWEB)", font=self.font_btn, text_color=self.color_text_primary)
         lbl_c2_title.pack(side="left")
 
         # Chip Leave
-        self.chip_appr = ctk.CTkFrame(self.box_leave, fg_color="#f0fdf4", border_width=1.5, border_color="#86efac", corner_radius=10)
+        self.chip_appr = ctk.CTkFrame(self.box_leave, fg_color="#F4FBF7", border_width=1, border_color="#B4E3CA", corner_radius=10)
         chip_ap_left = ctk.CTkFrame(self.chip_appr, fg_color="transparent")
         chip_ap_left.pack(side="left", padx=10, pady=6)
-        lbl_badge_ap = ctk.CTkLabel(chip_ap_left, text="✓", font=self.font_sm, fg_color=self.color_accent, text_color="#ffffff", corner_radius=6, width=24, height=24)
+        lbl_badge_ap = ctk.CTkLabel(chip_ap_left, text="✓", font=self.font_sm, fg_color=self.color_warning, text_color="#ffffff", corner_radius=6, width=24, height=24)
         lbl_badge_ap.pack(side="left", padx=(0, 8))
         chip_ap_text = ctk.CTkFrame(chip_ap_left, fg_color="transparent")
         chip_ap_text.pack(side="left")
-        self.lbl_chip_appr_name = ctk.CTkLabel(chip_ap_text, text="อนุมัติการลา.xlsx", font=self.font_sm, text_color=self.color_text_dark)
+        self.lbl_chip_appr_name = ctk.CTkLabel(chip_ap_text, text="อนุมัติการลา.xlsx", font=self.font_sm, text_color=self.color_text_primary)
         self.lbl_chip_appr_name.pack(anchor="w")
         self.lbl_chip_appr_meta = ctk.CTkLabel(chip_ap_text, text="0 KB • พร้อมใช้งาน", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_emerald)
         self.lbl_chip_appr_meta.pack(anchor="w")
 
         chip_ap_right = ctk.CTkFrame(self.chip_appr, fg_color="transparent")
         chip_ap_right.pack(side="right", padx=10, pady=6)
-        btn_chg_appr = ctk.CTkButton(chip_ap_right, text="เปลี่ยน...", font=self.font_sm, fg_color=self.color_accent, hover_color=self.color_accent_hover, height=30, width=80, corner_radius=6, command=self.browse_appr)
+        btn_chg_appr = ctk.CTkButton(chip_ap_right, text="เปลี่ยน...", font=self.font_sm, fg_color="#F0F2F6", hover_color="#E2E8F0", text_color=self.color_primary, border_width=1, border_color=self.color_border, height=30, width=75, corner_radius=6, command=self.browse_appr)
         btn_chg_appr.pack(side="left", padx=(0, 4))
-        btn_clr_ap = ctk.CTkButton(chip_ap_right, text="ล้าง", font=self.font_sm, fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", border_width=1, border_color="#cbd5e1", height=30, width=45, corner_radius=6, command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
+        btn_clr_ap = ctk.CTkButton(chip_ap_right, text="ล้าง", font=self.font_sm, fg_color="#F0F2F6", hover_color="#E2E8F0", text_color=self.color_text_muted, border_width=1, border_color=self.color_border, height=30, width=45, corner_radius=6, command=lambda: [self.txt_appr.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
         btn_clr_ap.pack(side="left")
 
         # Empty Leave
@@ -5125,10 +5161,10 @@ class ModernCustomTkinterApp:
             font=self.font_body,
             height=36,
             corner_radius=8,
-            border_width=1.5,
-            border_color="#cbd5e1",
-            fg_color="#ffffff",
-            text_color=self.color_text_dark
+            border_width=1,
+            border_color=self.color_border,
+            fg_color="#FFFFFF",
+            text_color=self.color_text_primary
         )
         self.txt_appr.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.txt_appr.bind("<KeyRelease>", lambda e: self._refresh_file_ui())
@@ -5137,10 +5173,10 @@ class ModernCustomTkinterApp:
             self.r_leave_empty,
             text="เลือกไฟล์...",
             font=self.font_btn,
-            fg_color=self.color_accent,
-            hover_color=self.color_accent_hover,
+            fg_color=self.color_primary,
+            hover_color=self.color_primary_hover,
             height=36,
-            width=100,
+            width=95,
             corner_radius=8,
             command=self.browse_appr
         )
@@ -5152,29 +5188,29 @@ class ModernCustomTkinterApp:
 
         c3_head = ctk.CTkFrame(self.box_att, fg_color="transparent")
         c3_head.pack(fill="x", pady=(2, 4))
-        badge_c3 = ctk.CTkLabel(c3_head, text="ATT", font=self.font_sm, fg_color="#0284c7", text_color="#ffffff", corner_radius=6, height=24, width=50)
+        badge_c3 = ctk.CTkLabel(c3_head, text="ATT", font=self.font_sm, fg_color="#EBF5FF", text_color=self.color_primary, corner_radius=6, height=24, width=48)
         badge_c3.pack(side="left", padx=(0, 8))
-        lbl_c3_title = ctk.CTkLabel(c3_head, text="3. ใบแจ้งเวลาทำงาน / ลืมสแกน (ถ้ามี)", font=self.font_btn, text_color=self.color_text_dark)
+        lbl_c3_title = ctk.CTkLabel(c3_head, text="3. ใบแจ้งเวลาทำงาน / ลืมสแกน (ถ้ามี)", font=self.font_btn, text_color=self.color_text_primary)
         lbl_c3_title.pack(side="left")
 
         # Chip Attendance
-        self.chip_att = ctk.CTkFrame(self.box_att, fg_color="#f0fdf4", border_width=1.5, border_color="#86efac", corner_radius=10)
+        self.chip_att = ctk.CTkFrame(self.box_att, fg_color="#F4FBF7", border_width=1, border_color="#B4E3CA", corner_radius=10)
         chip_at_left = ctk.CTkFrame(self.chip_att, fg_color="transparent")
         chip_at_left.pack(side="left", padx=10, pady=6)
         lbl_badge_at = ctk.CTkLabel(chip_at_left, text="✓", font=self.font_sm, fg_color=self.color_emerald, text_color="#ffffff", corner_radius=6, width=24, height=24)
         lbl_badge_at.pack(side="left", padx=(0, 8))
         chip_at_text = ctk.CTkFrame(chip_at_left, fg_color="transparent")
         chip_at_text.pack(side="left")
-        self.lbl_chip_att_name = ctk.CTkLabel(chip_at_text, text="ใบแจ้งการมาทำงาน.xlsx", font=self.font_sm, text_color=self.color_text_dark)
+        self.lbl_chip_att_name = ctk.CTkLabel(chip_at_text, text="ใบแจ้งการมาทำงาน.xlsx", font=self.font_sm, text_color=self.color_text_primary)
         self.lbl_chip_att_name.pack(anchor="w")
         self.lbl_chip_att_meta = ctk.CTkLabel(chip_at_text, text="0 KB • พร้อมใช้งาน", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_emerald)
         self.lbl_chip_att_meta.pack(anchor="w")
 
         chip_at_right = ctk.CTkFrame(self.chip_att, fg_color="transparent")
         chip_at_right.pack(side="right", padx=10, pady=6)
-        btn_chg_att = ctk.CTkButton(chip_at_right, text="เปลี่ยน...", font=self.font_sm, fg_color=self.color_emerald, hover_color=self.color_emerald_hover, height=30, width=80, corner_radius=6, command=self.browse_att)
+        btn_chg_att = ctk.CTkButton(chip_at_right, text="เปลี่ยน...", font=self.font_sm, fg_color="#F0F2F6", hover_color="#E2E8F0", text_color=self.color_primary, border_width=1, border_color=self.color_border, height=30, width=75, corner_radius=6, command=self.browse_att)
         btn_chg_att.pack(side="left", padx=(0, 4))
-        btn_clr_at = ctk.CTkButton(chip_at_right, text="ล้าง", font=self.font_sm, fg_color="#f1f5f9", hover_color="#e2e8f0", text_color="#334155", border_width=1, border_color="#cbd5e1", height=30, width=45, corner_radius=6, command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
+        btn_clr_at = ctk.CTkButton(chip_at_right, text="ล้าง", font=self.font_sm, fg_color="#F0F2F6", hover_color="#E2E8F0", text_color=self.color_text_muted, border_width=1, border_color=self.color_border, height=30, width=45, corner_radius=6, command=lambda: [self.txt_att.delete(0, 'end'), self.save_current_settings(), self._refresh_file_ui()])
         btn_clr_at.pack(side="left")
 
         # Empty Attendance
@@ -5188,10 +5224,10 @@ class ModernCustomTkinterApp:
             font=self.font_body,
             height=36,
             corner_radius=8,
-            border_width=1.5,
-            border_color="#cbd5e1",
-            fg_color="#ffffff",
-            text_color=self.color_text_dark
+            border_width=1,
+            border_color=self.color_border,
+            fg_color="#FFFFFF",
+            text_color=self.color_text_primary
         )
         self.txt_att.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.txt_att.bind("<KeyRelease>", lambda e: self._refresh_file_ui())
@@ -5200,21 +5236,21 @@ class ModernCustomTkinterApp:
             self.r_att_empty,
             text="เลือกไฟล์...",
             font=self.font_btn,
-            fg_color=self.color_emerald,
-            hover_color=self.color_emerald_hover,
+            fg_color=self.color_primary,
+            hover_color=self.color_primary_hover,
             height=36,
-            width=100,
+            width=95,
             corner_radius=8,
             command=self.browse_att
         )
         btn_browse_att.grid(row=0, column=1)
 
-        # CARD 3: โหมดการบันทึกไฟล์ (Save Mode)
+        # CARD 3: โหมดการบันทึกไฟล์ (Save Mode) - Floating White Card
         self.card_save = ctk.CTkFrame(
             left_scroll,
             corner_radius=12,
-            fg_color="#f8fafc",
-            border_width=1.5,
+            fg_color=self.color_card_bg,
+            border_width=1,
             border_color=self.color_border
         )
         self.card_save.pack(fill="x", padx=12, pady=(0, 10))
@@ -5223,7 +5259,7 @@ class ModernCustomTkinterApp:
             self.card_save,
             text="⚙️ โหมดการบันทึกไฟล์ (Save Mode)",
             font=self.font_btn,
-            text_color=self.color_text_dark
+            text_color=self.color_text_primary
         )
         lbl_save_title.pack(anchor="w", padx=12, pady=(8, 4))
 
@@ -5241,6 +5277,7 @@ class ModernCustomTkinterApp:
             radiobutton_width=18,
             radiobutton_height=18,
             fg_color=self.color_primary,
+            text_color=self.color_text_primary,
             command=self.save_current_settings
         )
         r1.pack(anchor="w", pady=2)
@@ -5254,6 +5291,7 @@ class ModernCustomTkinterApp:
             radiobutton_width=18,
             radiobutton_height=18,
             fg_color=self.color_primary,
+            text_color=self.color_text_primary,
             command=self.save_current_settings
         )
         r2.pack(anchor="w", pady=2)
@@ -5262,8 +5300,8 @@ class ModernCustomTkinterApp:
         self.card_cols = ctk.CTkFrame(
             left_scroll,
             corner_radius=12,
-            fg_color="#f8fafc",
-            border_width=1.5,
+            fg_color=self.color_card_bg,
+            border_width=1,
             border_color=self.color_border
         )
         self.card_cols.pack(fill="x", padx=12, pady=(0, 12))
@@ -5274,11 +5312,11 @@ class ModernCustomTkinterApp:
             self.card_cols,
             text="[+] กำหนดตำแหน่งคอลัมน์ (A, B, E, G, L, M, Q, แถว 2)",
             font=self.font_sm,
-            fg_color="#f8fafc",
-            hover_color="#f1f5f9",
+            fg_color="#F0F2F6",
+            hover_color="#E2E8F0",
             text_color=self.color_primary,
             border_width=1,
-            border_color="#e2e8f0",
+            border_color=self.color_border,
             anchor="w",
             height=36,
             corner_radius=8,
@@ -5296,58 +5334,58 @@ class ModernCustomTkinterApp:
         )
         lbl_cols_hint.pack(anchor="w", padx=10, pady=(0, 6))
 
-        col_inputs_frame = ctk.CTkFrame(self.frame_cols_body, fg_color="#ffffff", corner_radius=8, border_width=1, border_color="#e2e8f0")
+        col_inputs_frame = ctk.CTkFrame(self.frame_cols_body, fg_color="#F5F6FA", corner_radius=8, border_width=1, border_color=self.color_border)
         col_inputs_frame.pack(fill="x", padx=6, pady=(0, 8))
         for col_i in range(4):
             col_inputs_frame.grid_columnconfigure(col_i, weight=1)
 
         # แถว 1: รหัส, ชื่อ, สแกนดิบ, ประเภทลา
-        lbl_c_emp = ctk.CTkLabel(col_inputs_frame, text="รหัส", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_emp = ctk.CTkLabel(col_inputs_frame, text="รหัส", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_emp.grid(row=0, column=0, pady=(6, 1))
-        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_emp = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_emp.insert(0, "A")
         self.entry_col_emp.grid(row=1, column=0, pady=(0, 6))
 
-        lbl_c_name = ctk.CTkLabel(col_inputs_frame, text="ชื่อ", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_name = ctk.CTkLabel(col_inputs_frame, text="ชื่อ", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_name.grid(row=0, column=1, pady=(6, 1))
-        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_name = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_name.insert(0, "B")
         self.entry_col_name.grid(row=1, column=1, pady=(0, 6))
 
-        lbl_c_scan = ctk.CTkLabel(col_inputs_frame, text="สแกน", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_scan = ctk.CTkLabel(col_inputs_frame, text="สแกน", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_scan.grid(row=0, column=2, pady=(6, 1))
-        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_scan = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_scan.insert(0, "E")
         self.entry_col_scan.grid(row=1, column=2, pady=(0, 6))
 
-        lbl_c_leave = ctk.CTkLabel(col_inputs_frame, text="วันลา", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_leave = ctk.CTkLabel(col_inputs_frame, text="วันลา", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_leave.grid(row=0, column=3, pady=(6, 1))
-        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_leave = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_leave.insert(0, "G")
         self.entry_col_leave.grid(row=1, column=3, pady=(0, 6))
 
         # แถว 2: เข้า, ออก, โค้ด, เริ่มแถว
-        lbl_c_in = ctk.CTkLabel(col_inputs_frame, text="เวลาเข้า", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_in = ctk.CTkLabel(col_inputs_frame, text="เวลาเข้า", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_in.grid(row=2, column=0, pady=(4, 1))
-        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_in = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_in.insert(0, "L")
         self.entry_col_in.grid(row=3, column=0, pady=(0, 6))
 
-        lbl_c_out = ctk.CTkLabel(col_inputs_frame, text="เวลาออก", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_out = ctk.CTkLabel(col_inputs_frame, text="เวลาออก", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_out.grid(row=2, column=1, pady=(4, 1))
-        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_out = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_out.insert(0, "M")
         self.entry_col_out.grid(row=3, column=1, pady=(0, 6))
 
-        lbl_c_code = ctk.CTkLabel(col_inputs_frame, text="รหัสย่อ", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_code = ctk.CTkLabel(col_inputs_frame, text="รหัสย่อ", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_code.grid(row=2, column=2, pady=(4, 1))
-        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_col_code = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_col_code.insert(0, "Q")
         self.entry_col_code.grid(row=3, column=2, pady=(0, 6))
 
-        lbl_c_row = ctk.CTkLabel(col_inputs_frame, text="แถวเริ่ม", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_dark)
+        lbl_c_row = ctk.CTkLabel(col_inputs_frame, text="แถวเริ่ม", font=ctk.CTkFont(family=self.font_family, size=11), text_color=self.color_text_primary)
         lbl_c_row.grid(row=2, column=3, pady=(4, 1))
-        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1.5, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark, justify="center")
+        self.entry_start_row = ctk.CTkEntry(col_inputs_frame, font=self.font_btn, width=54, height=32, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary, justify="center")
         self.entry_start_row.insert(0, "2")
         self.entry_start_row.grid(row=3, column=3, pady=(0, 6))
 
@@ -5360,6 +5398,7 @@ class ModernCustomTkinterApp:
             font=self.font_sm,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
+            text_color="#FFFFFF",
             height=30,
             corner_radius=6,
             command=self.save_column_settings_explicit
@@ -5370,11 +5409,11 @@ class ModernCustomTkinterApp:
             col_btn_box,
             text="คืนค่ามาตรฐาน",
             font=self.font_sm,
-            fg_color="#f1f5f9",
-            hover_color="#e2e8f0",
+            fg_color="#F0F2F6",
+            hover_color="#E2E8F0",
             text_color=self.color_primary,
             border_width=1,
-            border_color="#cbd5e1",
+            border_color=self.color_border,
             height=30,
             corner_radius=6,
             command=self.reset_column_defaults
@@ -5388,35 +5427,35 @@ class ModernCustomTkinterApp:
             entry_w.bind("<FocusOut>", lambda e: self.save_current_settings())
 
         # GitHub Repo Setting Box
-        repo_bar = ctk.CTkFrame(self.frame_cols_body, fg_color="#ffffff", corner_radius=8, border_width=1, border_color="#e2e8f0")
+        repo_bar = ctk.CTkFrame(self.frame_cols_body, fg_color="#FFFFFF", corner_radius=8, border_width=1, border_color=self.color_border)
         repo_bar.pack(fill="x", padx=6, pady=(4, 8))
-        lbl_repo = ctk.CTkLabel(repo_bar, text="GitHub Repo:", font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"), text_color=self.color_text_dark)
+        lbl_repo = ctk.CTkLabel(repo_bar, text="GitHub Repo:", font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"), text_color=self.color_text_primary)
         lbl_repo.pack(side="left", padx=(8, 4), pady=4)
-        self.entry_github_repo = ctk.CTkEntry(repo_bar, font=self.font_sm, height=28, corner_radius=6, border_width=1, border_color="#cbd5e1", fg_color="#ffffff", text_color=self.color_text_dark)
+        self.entry_github_repo = ctk.CTkEntry(repo_bar, font=self.font_sm, height=28, corner_radius=6, border_width=1, border_color=self.color_border, fg_color="#FFFFFF", text_color=self.color_text_primary)
         self.entry_github_repo.insert(0, self.github_repo)
         self.entry_github_repo.pack(side="left", fill="x", expand=True, padx=4, pady=4)
-        btn_save_repo = ctk.CTkButton(repo_bar, text="บันทึก", font=ctk.CTkFont(family=self.font_family, size=11), fg_color=self.color_primary, height=28, width=50, corner_radius=6, command=self.save_github_repo_from_entry)
+        btn_save_repo = ctk.CTkButton(repo_bar, text="บันทึก", font=ctk.CTkFont(family=self.font_family, size=11), fg_color=self.color_primary, hover_color=self.color_primary_hover, text_color="#FFFFFF", height=28, width=50, corner_radius=6, command=self.save_github_repo_from_entry)
         btn_save_repo.pack(side="left", padx=(0, 6), pady=4)
 
         # =============================================================
-        # 2B. แผงฝั่งขวา: WORKSPACE & ACTION STAGE (พื้นที่ทำงานหลัก สะอาด โปร่งตา)
+        # 2B. แผงฝั่งขวา: WORKSPACE & ACTION STAGE (พื้นที่ทำงานหลัก สไตล์ macOS Settings)
         # =============================================================
         right_stage = ctk.CTkFrame(split_container, fg_color=self.color_canvas, corner_radius=0)
         right_stage.grid(row=0, column=1, sticky="nsew", padx=16, pady=12)
         right_stage.grid_columnconfigure(0, weight=1)
         right_stage.grid_rowconfigure(0, weight=0) # Stepper
-        right_stage.grid_rowconfigure(1, weight=1) # Developer Console Terminal
+        right_stage.grid_rowconfigure(1, weight=1) # Graphite Activity Terminal
         right_stage.grid_rowconfigure(2, weight=0) # Action Center Bar
 
         # -------------------------------------------------------------
-        # STEPPER CARD (ขั้นตอนการทำงานอัจฉริยะ 6 ขั้นตอน)
+        # STEPPER CARD (Minimal Segmented Glass Stepper)
         # -------------------------------------------------------------
         self.stepper_frame = ctk.CTkFrame(
             right_stage,
             corner_radius=12,
-            fg_color="#ffffff",
+            fg_color=self.color_card_bg,
             border_width=1,
-            border_color="#e2e8f0"
+            border_color=self.color_border
         )
         self.stepper_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self.stepper_frame.grid_columnconfigure(0, weight=1)
@@ -5429,7 +5468,7 @@ class ModernCustomTkinterApp:
             st_header,
             text="ลำดับขั้นตอนการทำงาน (Workflow Stepper)",
             font=self.font_btn,
-            text_color=self.color_text_dark
+            text_color=self.color_text_primary
         )
         lbl_st_title.grid(row=0, column=0, sticky="w")
 
@@ -5443,10 +5482,10 @@ class ModernCustomTkinterApp:
 
         self.progress_bar = ctk.CTkProgressBar(
             self.stepper_frame,
-            height=6,
-            corner_radius=3,
+            height=8,
+            corner_radius=4,
             progress_color=self.color_emerald,
-            fg_color="#e2e8f0"
+            fg_color="#E5E7EB"
         )
         self.progress_bar.set(0.0)
         self.progress_bar.pack(fill="x", padx=14, pady=(2, 8))
@@ -5472,19 +5511,19 @@ class ModernCustomTkinterApp:
         for num, title, subtitle in steps_def:
             card = ctk.CTkFrame(
                 st_cards_box,
-                fg_color="#f8fafc",
+                fg_color="#F0F2F6",
                 corner_radius=8,
                 border_width=1,
-                border_color="#e2e8f0",
+                border_color="#E5E7EB",
                 height=32
             )
             card.grid(row=0, column=num - 1, padx=3, pady=2, sticky="ew")
             card.grid_columnconfigure(1, weight=1)
 
-            lbl_t = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"), text_color=self.color_text_dark)
+            lbl_t = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(family=self.font_family, size=11, weight="bold"), text_color=self.color_text_primary)
             lbl_t.grid(row=0, column=0, padx=(6, 2), pady=2, sticky="w")
 
-            lbl_sub = ctk.CTkLabel(card, text="○ รอระบุ", font=ctk.CTkFont(family=self.font_family, size=10), text_color="#94a3b8")
+            lbl_sub = ctk.CTkLabel(card, text="○ รอระบุ", font=ctk.CTkFont(family=self.font_family, size=10), text_color="#8E8E93")
             lbl_sub.grid(row=0, column=1, padx=(0, 6), pady=2, sticky="e")
 
             self.step_cards[num] = card
@@ -5492,14 +5531,14 @@ class ModernCustomTkinterApp:
             self.step_sublabels[num] = lbl_sub
 
         # -------------------------------------------------------------
-        # DEVELOPER ACTIVITY TERMINAL CARD (หน้าต่างคอนโซลนักพัฒนาสไตล์ Obsidian)
+        # DEVELOPER ACTIVITY TERMINAL (Graphite Dark #1D1D1F สไตล์ macOS Console)
         # -------------------------------------------------------------
         self.card_log = ctk.CTkFrame(
             right_stage,
             corner_radius=14,
-            fg_color="#0b1120",
-            border_width=1.5,
-            border_color="#1e293b"
+            fg_color=self.color_console_bg,
+            border_width=1,
+            border_color="#333336"
         )
         self.card_log.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
         self.card_log.grid_columnconfigure(0, weight=1)
@@ -5520,7 +5559,7 @@ class ModernCustomTkinterApp:
             traffic_box,
             text="DEVELOPER ACTIVITY TERMINAL",
             font=ctk.CTkFont(family=self.font_family, size=12, weight="bold"),
-            text_color="#94a3b8"
+            text_color="#8E8E93"
         )
         lbl_log_title.pack(side="left")
 
@@ -5531,9 +5570,9 @@ class ModernCustomTkinterApp:
             log_actions_box,
             text="📋 คัดลอก",
             font=ctk.CTkFont(family=self.font_family, size=11),
-            fg_color="#1e293b",
-            hover_color="#334155",
-            text_color="#f8fafc",
+            fg_color="#2C2C2E",
+            hover_color="#3A3A3C",
+            text_color="#E5E5EA",
             height=28,
             width=65,
             corner_radius=6,
@@ -5545,9 +5584,9 @@ class ModernCustomTkinterApp:
             log_actions_box,
             text="🧹 ล้าง",
             font=ctk.CTkFont(family=self.font_family, size=11),
-            fg_color="#1e293b",
-            hover_color="#334155",
-            text_color="#f8fafc",
+            fg_color="#2C2C2E",
+            hover_color="#3A3A3C",
+            text_color="#E5E5EA",
             height=28,
             width=50,
             corner_radius=6,
@@ -5561,6 +5600,7 @@ class ModernCustomTkinterApp:
             font=ctk.CTkFont(family=self.font_family, size=11),
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
+            text_color="#FFFFFF",
             height=28,
             corner_radius=6,
             state="disabled",
@@ -5574,6 +5614,7 @@ class ModernCustomTkinterApp:
             font=ctk.CTkFont(family=self.font_family, size=11),
             fg_color=self.color_primary,
             hover_color=self.color_primary_hover,
+            text_color="#FFFFFF",
             height=28,
             corner_radius=6,
             state="disabled",
@@ -5590,31 +5631,31 @@ class ModernCustomTkinterApp:
             self.card_log,
             corner_radius=10,
             font=self.font_body,
-            fg_color="#090d16",
-            text_color="#e2e8f0",
+            fg_color=self.color_console_bg,
+            text_color=self.color_console_text,
             border_width=0
         )
         self.txt_log.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
         try:
             tb = self.txt_log._textbox
-            tb.tag_configure("tag_success", foreground="#34d399", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_skip", foreground="#fbbf24", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_warn", foreground="#f87171", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_info", foreground="#60a5fa", font=(self.font_family, 12, "bold"))
-            tb.tag_configure("tag_normal", foreground="#e2e8f0", font=(self.font_family, 12))
+            tb.tag_configure("tag_success", foreground="#30A46C", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_skip", foreground="#D99A24", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_warn", foreground="#E5484D", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_info", foreground="#007AFF", font=(self.font_family, 12, "bold"))
+            tb.tag_configure("tag_normal", foreground="#E5E5EA", font=(self.font_family, 12))
         except Exception:
             pass
 
         # -------------------------------------------------------------
-        # ACTION CENTER BAR (ปุ่มแอคชันขนาดพรีเมียม สวยงาม พอดีมือ ไม่ยืดยาวเต็มจอ)
+        # ACTION CENTER BAR (ปุ่มแอคชันสไตล์ Apple: Refined Blue & Soft Emerald)
         # -------------------------------------------------------------
         action_bar = ctk.CTkFrame(
             right_stage,
             corner_radius=12,
-            fg_color="#ffffff",
+            fg_color=self.color_card_bg,
             border_width=1,
-            border_color="#e2e8f0"
+            border_color=self.color_border
         )
         action_bar.grid(row=2, column=0, sticky="ew")
         action_bar.grid_columnconfigure(0, weight=1)
@@ -5637,8 +5678,11 @@ class ModernCustomTkinterApp:
             act_right,
             text="👁️ Pre-Check Preview",
             font=self.font_btn,
-            fg_color=self.color_accent,
-            hover_color=self.color_accent_hover,
+            fg_color="#F0F2F6",
+            hover_color="#E2E8F0",
+            text_color=self.color_primary,
+            border_width=1,
+            border_color=self.color_border,
             height=44,
             width=210,
             corner_radius=10,
@@ -5652,6 +5696,7 @@ class ModernCustomTkinterApp:
             font=self.font_cta,
             fg_color=self.color_emerald,
             hover_color=self.color_emerald_hover,
+            text_color="#FFFFFF",
             height=46,
             width=230,
             corner_radius=12,
@@ -5663,20 +5708,26 @@ class ModernCustomTkinterApp:
         add_tooltip(self.btn_process, "เริ่มประมวลผล นำข้อมูลการลาและเวลาทำงานมาบันทึกลงไฟล์ STAFF TIME ทันที")
 
         # -------------------------------------------------------------
-        # 3. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Slim macOS Footer Bar)
+        # 3. แถบล่างสุดแสดงเครดิตผู้พัฒนา (Slim macOS Light Footer Bar)
         # -------------------------------------------------------------
-        footer_bar = ctk.CTkFrame(self.root, fg_color=self.color_navy, corner_radius=0, height=28)
+        footer_bar = ctk.CTkFrame(self.root, fg_color=self.color_canvas, border_width=1, border_color=self.color_border_subtle, corner_radius=0, height=28)
         footer_bar.grid(row=2, column=0, sticky="ew")
         lbl_footer = ctk.CTkLabel(
             footer_bar,
             text="CNT STAFF TIME AUTOMATION SUITE 2026  •  CHRISTIANI & NIELSEN (THAI) PCL.  •  BY WERAWAT THAMRONGDULLAPARK",
             font=ctk.CTkFont(family=self.font_family, size=11),
-            text_color="#64748b"
+            text_color="#8E8E93"
         )
         lbl_footer.pack(pady=4)
 
-        self.log("Developer Console พร้อมทำงาน — ระบบ Universal Edition 2026 พร้อมสำหรับการประมวลผล")
-        self.log("คำแนะนำ: สามารถกด 'Pre-Check Preview' เพื่อดูพรีวิวทุกจุดก่อนบันทึกจริงได้เสมอ")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("  CNT STAFF TIME AUTOMATION SUITE 2026 — DEVELOPER CONSOLE")
+        self.log("  • Engine: High-Speed Excel Processor  |  Platform: Windows 64-bit")
+        self.log("  • Security: Zero Data Overwrite Protection Active")
+        self.log("  • Architecture: Apple Liquid Glass Soft Light Premium Edition")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("ℹ️  ระบบพร้อมทำงาน: กรุณาระบุไฟล์ STAFF TIME และไฟล์ข้อมูลการลาหรือเวลาทำงาน")
+        self.log("💡 คำแนะนำ: สามารถกด 'Pre-Check Preview' เพื่อจำลองผลลัพธ์ทุกจุดก่อนบันทึกจริง")
 
     def copy_log_to_clipboard(self):
         """คัดลอกข้อความ Log ทั้งหมดลงใน Windows Clipboard"""
@@ -5803,10 +5854,11 @@ class ModernCustomTkinterApp:
         lbl_sub = self.step_sublabels[step_num]
 
         theme = {
-            "completed": ("#ecfdf5", "#a7f3d0", "#059669"),
-            "ready": ("#eff6ff", "#bfdbfe", "#0071e3"),
-            "active": ("#fef3c7", "#fde68a", "#b45309"),
-            "waiting": ("#f8fafc", "#e2e8f0", "#94a3b8")
+            "completed": ("#F4FBF7", "#B4E3CA", "#30A46C"),
+            "ready": ("#EBF5FF", "#CCE4FF", "#007AFF"),
+            "active": ("#FFFBEB", "#FDE68A", "#D99A24"),
+            "error": ("#FEF2F2", "#FECACA", "#E5484D"),
+            "waiting": ("#F0F2F6", "#E5E7EB", "#8E8E93")
         }
         bg, border, text_c = theme.get(status, theme["waiting"])
         try:
@@ -6339,7 +6391,7 @@ class ModernCustomTkinterApp:
             
             def on_success():
                 self.btn_process.configure(
-                    text="เริ่มประมวลผลและบันทึกข้อมูลลงไฟล์ STAFF TIME ทันที",
+                    text="▶ เริ่มประมวลผลทันที",
                     fg_color=self.color_emerald,
                     state="normal"
                 )
@@ -6369,7 +6421,7 @@ class ModernCustomTkinterApp:
             def on_error(err_msg):
                 self.log(f"\n❌ เกิดข้อผิดพลาด: {err_msg}")
                 self.btn_process.configure(
-                    text="เริ่มประมวลผลและบันทึกข้อมูลลงไฟล์ STAFF TIME ทันที",
+                    text="▶ เริ่มประมวลผลทันที",
                     fg_color=self.color_emerald,
                     state="normal"
                 )
@@ -6377,7 +6429,7 @@ class ModernCustomTkinterApp:
                 self.is_processing = False
                 self.progress_bar.set(0.0)
                 self.lbl_progress_status.configure(text="❌ เกิดข้อผิดพลาดในการประมวลผล", text_color="#dc2626")
-                self.update_workflow_stepper()
+                self._set_step_status(6, "error", "❌ ขัดข้อง")
                 messagebox.showerror("เกิดข้อผิดพลาด", f"ไม่สามารถประมวลผลได้:\n{err_msg}")
             self.root.after(0, on_error, str(e))
 

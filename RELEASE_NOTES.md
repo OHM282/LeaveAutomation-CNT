@@ -1,30 +1,29 @@
 # Release Notes: CNT STAFF TIME AUTOMATION
 
-## เวอร์ชัน 1.2.8 (Universal Edition — Apple Liquid Glass Hybrid)
-**วันที่ปล่อยอัปเดต:** 4 พฤศจิกายน 2026  
+## เวอร์ชัน 1.2.8 (Universal Edition — Apple Liquid Glass Soft Light Premium Edition)
+**วันที่ปล่อยอัปเดต:** 5 พฤศจิกายน 2026  
 **ชื่อไฟล์เผยแพร่:** `LeaveAutomation.exe` | `LeaveAutomation.zip`  
 **GitHub Repository:** `OHM282/LeaveAutomation-CNT`  
 **สถานะการทดสอบ:** ผ่านการทดสอบระดับระบบ (Regression Test) 100% ครบทุกโมดูล
 
 ---
 
-### 🌟 ไฮไลต์สำคัญในเวอร์ชัน 1.2.8
+### 🌟 ไฮไลต์สำคัญในเวอร์ชัน 1.2.8 (Soft Light Visual Correction)
 
-#### 1. เปลี่ยนชื่อเป็น Universal Edition อย่างเป็นทางการ
-- ตัดรหัสโครงการ `1856` ออกจากชื่อไฟล์และระบบทั้งหมด เพื่อรองรับการนำไปใช้งานในทุกโครงการก่อสร้างและทุกส่วนงานของ **Christiani & Nielsen (Thai) PCL.** ทั่วประเทศ
-- เปลี่ยนชื่อโปรแกรมหลักเป็น **`LeaveAutomation.exe`** และ **`LeaveAutomation.zip`**
-- อัปเดตสเปกการบิลด์เป็น `LeaveAutomation.spec` และปรับแก้ระบบ Auto-Updater ตลอดจนตัวอย่างไฟล์ในหน้าต่างวิธีใช้ (Manual)
+#### 1. ยกระดับ Visual Language เป็น Apple Liquid Glass Soft Light
+- **Soft Neutral Canvas (`#F5F6FA`):** เปลี่ยนพื้นหลังจากมืดทึบเป็นโทนสว่างนุ่มนวล สบายตา ไม่อึดอัด
+- **Light Frosted Header (`#FFFFFF` + Subdivider `#E5E7EB`):** แถบหัวเรื่องสไตล์ macOS Light Frosted Glass พร้อมฟอนต์เข้ม คอนทราสต์ชัดเจน และโลโก้ CN ไร้กรอบการ์ดขาว
+- **Elevated Floating White Cards (`#FFFFFF` + Border `#D8DCE3`):** การ์ดพื้นขาวลอยตัวพร้อมขอบบางโปร่งแสง ให้มิติและความลึก ไม่แบนเรียบและไร้ขอบสีฟ้าเข้มหนาเตอะ
+- **Graphite Developer Console (`#1D1D1F`):** คอนโซลสไตล์ macOS Developer Terminal พื้นกราไฟต์เข้มระดับพรีเมียม (ไม่ใช่ดำสนิท `#000000`) ข้อความสีเทานุ่มนวล (`#E5E5EA`) พร้อมระบบจำแนกสีสถานะ (Success `#30A46C`, Warning `#D99A24`, Error `#E5484D`, Info `#007AFF`)
+- **Minimal Segmented Stepper:** ลำดับขั้นตอน 6 ขั้นตอน สไตล์ Segmented Glass พร้อมสีสถานะชัดเจน (เขียว Soft Emerald เมื่อเสร็จ, ฟ้า Apple Blue เมื่อพร้อม, ส้ม Amber เมื่อกำลังทำ, แดง Soft Red เมื่อขัดข้อง)
+- **Windows 11 Native DWM Light Titlebar:** ซิงค์ไตเติลบาร์ของ Windows 11 ให้เป็นสีขาวนวล `#FFFFFF` เข้ากับตัวโปรแกรม 100% ตัดแถบสีแดงหรือสีที่แปลกแยกออกอย่างสิ้นเชิง
 
-#### 2. ดีไซน์ใหม่: Apple Liquid Glass Split Studio Layout (macOS Tahoe Inspired)
-- **Unified Toolbar แถวเดียวสูง 54px (แก้ปัญหาส่วนหัวรก 100%):** ยุบจากเดิมที่หนาเตอะ 4 แถว เหลือเพียง 1 แถวคลีนหรูสไตล์ macOS พร้อมโลโก้ CN ไร้กรอบการ์ดขาว กลมกลืนกับ Title Bar สไตล์ Native
-- **macOS Split Studio Layout:** ปรับโครงสร้างหน้าจอเป็น 2 ฝั่งอย่างเป็นสัดส่วน:
-  - **ฝั่งซ้าย (Source Files Hub):** รวมการเลือกไฟล์ 3 ไฟล์ (ไฟล์หลัก STAFF TIME, วันลา, ใบแจ้งเวลา) ในลักษณะการ์ดมนสวยงาม พร้อมปุ่มโหมดบันทึกไฟล์ และลิ้นชักปรับแต่งตำแหน่งคอลัมน์
-  - **ฝั่งขวา (Workspace Stage):** ด้านบนแสดง Workflow Stepper 6 ขั้นตอนพร้อมแถบหลอดความคืบหน้า ตรงกลางเป็น Developer Activity Terminal สไตล์ Obsidian Glass และด้านล่างเป็นแผงปุ่มสั่งการ
-- **ปุ่ม Action Buttons พอดีมือ:** ปรับขนาดปุ่ม "Pre-Check Preview" และ "เริ่มประมวลผลทันที" ให้มีขนาดและมิติที่พอดีมือ วางชิดมุมขวาอย่างลงตัว ยกเลิกปุ่มยืดยาวเต็มขอบจอ 1,000+ px
-- **Developer-Grade Activity Terminal:** คอนโซลแสดงสถานะการทำงานสไตล์ Terminal พร้อมปุ่มคัดลอก ล้าง และเปิดรายงานตรวจสอบ (Audit Report)
-- **แก้ปัญหาปุ่มสเกลตัวอักษรโดนตัดขอบ:** ปรับความกว้างของ Segmented Button เป็น 185px แสดงตัวเลข `100%`, `115%`, `125%` ครบถ้วน ไม่หลุดหายเป็น `.00%`
+#### 2. แก้ไข Bug & Typography Hierarchy
+- **แก้ปัญหาปุ่มสเกลตัวอักษรโดนตัดขอบ (`.00%` -> `100%`):** ขยายความกว้าง Segmented Button เป็น 220px และปรับ `dynamic_resizing=False` ป้องกันระบบ DPI Scaling บน Windows ตัดตัวเลขตัวหน้าทิ้ง พร้อมระบบ Active Pill Highlight สีขาวคมชัด
+- **ปุ่ม Action Buttons มิติ Apple:** ปุ่ม "Pre-Check Preview" สไตล์ Glass Secondary และปุ่ม "▶ เริ่มประมวลผลทันที" ในสี Soft Emerald (`#30A46C`) พร้อมสถานะ Loading และระบบป้องกันการกดซ้ำระหว่างประมวลผล
+- **Smart File Hub Drop Zone:** แสดงสถานะไฟล์ ชื่อไฟล์ ขนาดไฟล์ (KB/MB) และปุ่ม Browse / Change แยกออกจากพื้นที่ข้อมูลอย่างชัดเจน
 
-#### 3. ปรับปรุง Logic คำนวณเวลาและการลา (Core Engine)
+#### 3. ปรับปรุง Logic คำนวณเวลาและการลา (Core Engine 100% Preserved)
 - **Auto-Fix เวลาเลิกงานวันหยุด/วันอาทิตย์ (15:00 น.):** แก้ปัญหากรณีพนักงานสแกนออกรอบบ่ายช่วง 12:00–16:00 น. ในวันที่มีเครื่องหมาย "น" หรือวันอาทิตย์ ระบบจะลงเวลา Check-Out ให้อัตโนมัติ ป้องกันไม่ให้ขึ้นข้อความ "ไม่ได้แสกน" และไม่ถูกหักเวลา 4 ชั่วโมงโดยไม่จำเป็น
 - **Universal Column Detection:** ตรวจจับคอลัมน์อัตโนมัติรองรับแบบฟอร์มสแกนเวลาทั้งแบบเดิมและแบบใหม่ รวมถึงรองรับรูปแบบปี พ.ศ. และ ค.ศ.
 - **ระบบตรวจสอบความผิดปกติ (Pre-Check 100% Preview):** จำลองผลการอ่านชีทและจับคู่พนักงานก่อนบันทึกจริง ป้องกันข้อมูลตกหล่น
