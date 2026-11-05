@@ -5762,7 +5762,7 @@ class ModernCustomTkinterApp:
             text_color=self.color_primary
         )
         lbl_footer_right.grid(row=0, column=1, sticky="e", padx=16, pady=4)
-        add_tooltip(lbl_footer_right, "โทรศัพท์ติดต่อสอบถามการใช้งาน หรือแจ้งปัญหาโปรแกรม: 063-960-4230 (วรวัฒน์)")
+        add_tooltip(lbl_footer_right, "โทรศัพท์ติดต่อสอบถามการใช้งาน หรือแจ้งปัญหาโปรแกรม: 063-960-4230 (คุณวีรวัช)")
 
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("  CNT STAFF TIME AUTOMATION SUITE 2026 — DEVELOPER CONSOLE")
